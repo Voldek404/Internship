@@ -19,7 +19,7 @@ def get_random_numbers():
         return f"Error: HTTP {response.status_code}"""
 
 
-def frequency_test(bit_string, bit_string_length):
+def frequency_test_1(bit_string, bit_string_length):
     numberOfBits = bit_string_length
     numbers = [-1 if bit == '0' else 1 for bit in bit_string]
     nth_PatrialSum = sum(numbers)
@@ -27,15 +27,35 @@ def frequency_test(bit_string, bit_string_length):
     p_Value = sp.erfc(observedValue / 2 ** 0.5)
     frequency_test_conclusion = (p_Value > 0.01)
     if frequency_test_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста: {frequency_test_conclusion}"
+        return f"Последовательность чисел является случайной, статус прохождения теста frequency_test_1 : {frequency_test_conclusion}"
     if not frequency_test_conclusion:
-        return f"Последовательность чисел не  является случайной, статус прохождения теста: {frequency_test_conclusion}"
+        return f"Последовательность чисел не  является случайной, статус прохождения теста frequency_test_1: {frequency_test_conclusion}"
+
+
+def frequency_test_within_a_Block_2(bit_string):
+    bit_string = bit_string[:105]
+    block_size = 15
+    number_of_blocks = 7
+    pi_values = []
+    for i in range(number_of_blocks):
+        block = bit_string[i * block_size:(i + 1) * block_size]
+        pi_i = block.count('1') / block_size  # Доля единиц в блоке
+        pi_values.append(pi_i)
+    chi_square = 4 * block_size * sum((pi_i - 0.5) ** 2 for pi_i in pi_values)
+    p_Value = sp.gammaincc(number_of_blocks / 2, chi_square / 2)
+    frequency_test_conclusion = (p_Value > 0.01)
+    if frequency_test_conclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста frequency_test_within_a_Block_2: {frequency_test_conclusion}"
+    if not frequency_test_conclusion:
+        return f"Последовательность чисел не  является случайной, статус прохождения теста frequency_test_within_a_Block_2: {frequency_test_conclusion}"
+
 
 
 random_numbers, bit_string, bit_string_length = get_random_numbers()
 print(f'Список полученных от сервера чисел {random_numbers}')
 print(f'Битовое представления последовательности чисел {bit_string}')
 if bit_string is not None and bit_string_length is not None:
-    print(frequency_test(bit_string, bit_string_length))
+    print(frequency_test_1(bit_string, bit_string_length))
 else:
     print("Error: Could not perform frequency test due to invalid random number data")
+print(frequency_test_within_a_Block_2(bit_string))
