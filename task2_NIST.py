@@ -8,11 +8,10 @@ def get_random_numbers():
     if response.status_code == 200:
         data = response.json()
         if data['success']:
-            random_numbers = data['data']  # Список случайных чисел
-            # Преобразуем каждое число в 16-битную строку и соединяем в одну строку
+            random_numbers = data['data']
             bit_string = ''.join(format(num, '016b') for num in random_numbers)
             bit_string_length = len(bit_string)
-            return random_numbers, bit_string, bit_string_length  # Возвращаем строку битов
+            return random_numbers, bit_string, bit_string_length
         else:
             return None, None, None
     else:
@@ -39,7 +38,7 @@ def frequency_test_within_a_Block_2(bit_string):
     pi_values = []
     for i in range(number_of_blocks):
         block = bit_string[i * block_size:(i + 1) * block_size]
-        pi_i = block.count('1') / block_size  # Доля единиц в блоке
+        pi_i = block.count('1') / block_size
         pi_values.append(pi_i)
     chi_square = 4 * block_size * sum((pi_i - 0.5) ** 2 for pi_i in pi_values)
     p_Value = sp.gammaincc(number_of_blocks / 2, chi_square / 2)
