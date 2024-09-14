@@ -32,10 +32,9 @@ def get_random_numbers_local():
 
 
 def frequency_test_1(bit_string, bit_string_length):
-    numberOfBits = bit_string_length
     numbers = [-1 if bit == '0' else 1 for bit in bit_string]
     nth_PatrialSum = sum(numbers)
-    observedValue = abs(nth_PatrialSum) / (numberOfBits) ** 0.5
+    observedValue = abs(nth_PatrialSum) / (bit_string_length) ** 0.5
     p_Value = sp.erfc(observedValue / 2 ** 0.5)
     frequency_test_conclusion = (p_Value >= 0.01)
     if frequency_test_conclusion:
