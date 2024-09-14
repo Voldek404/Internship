@@ -187,10 +187,11 @@ def discrete_fourier_transform_test_6(bit_string, bit_string_length):
 
 def non_overlapping_template_machine_test7(bit_string, bit_string_length):
     template = "111"
-    block_size = bit_string_length // numberOfBlocks
+    numberOfBitBlocks = 8
+    block_size = bit_string_length // numberOfBitBlocks
     template_length = len(template)
     occurrences = []
-    for i in range(numberOfBlocks):
+    for i in range(numberOfBitBlocks):
         block = bit_string[i * block_size:(i + 1) * block_size]
         count = 0
         j = 0
@@ -206,8 +207,8 @@ def non_overlapping_template_machine_test7(bit_string, bit_string_length):
     mu = (M - m + 1) / (2 ** m)
     sigma_squared = M * ((1 / 2 ** m) - (2 * m - 1) / 2 ** (2 * m))
     chi_square = sum(((W_i - mu) ** 2) / sigma_squared for W_i in occurrences)
-    p_Value = sp.gammaincc(numberOfBlocks / 2, chi_square / 2)
-    v = (p_Value >= 0.01)
+    p_Value = sp.gammaincc(numberOfBitBlocks / 2, chi_square / 2)
+    non_overlapping_template_machine_conclusion = (p_Value >= 0.01)
     if non_overlapping_template_machine_conclusion:
         return f"Последовательность чисел является случайной, статус прохождения теста non_overlapping_template_machine_conclusion_test_7: {non_overlapping_template_machine_conclusion}"
     else:
