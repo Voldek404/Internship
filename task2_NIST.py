@@ -4,6 +4,8 @@ import random
 import numpy as np
 from scipy.linalg import lu
 from scipy.stats import chi2
+from scipy.fftpack import fft
+from scipy.special import erfc
 
 
 def get_random_numbers():
@@ -21,11 +23,13 @@ def get_random_numbers():
     else:
         return f"Error: HTTP {response.status_code}"
 
+
 def get_random_numbers_local():
     random_numbers = [random.randint(0, 65535) for _ in range(8)]
     bit_string = ''.join(format(num, '016b') for num in random_numbers)
     bit_string_length = len(bit_string)
     return random_numbers, bit_string, bit_string_length
+
 
 def frequency_test_1(bit_string, bit_string_length):
     numberOfBits = bit_string_length
@@ -33,7 +37,7 @@ def frequency_test_1(bit_string, bit_string_length):
     nth_PatrialSum = sum(numbers)
     observedValue = abs(nth_PatrialSum) / (numberOfBits) ** 0.5
     p_Value = sp.erfc(observedValue / 2 ** 0.5)
-    frequency_test_conclusion = (p_Value > 0.01)
+    frequency_test_conclusion = (p_Value >= 0.01)
     if frequency_test_conclusion:
         return f"Последовательность чисел является случайной, статус прохождения теста frequency_test_1 : {frequency_test_conclusion}"
     if not frequency_test_conclusion:
@@ -50,7 +54,7 @@ def frequency_test_within_a_Block_2(bit_string):
         pi_values.append(pi_i)
     chi_square = 4 * block_size * sum((pi_i - 0.5) ** 2 for pi_i in pi_values)
     p_Value = sp.gammaincc(number_of_blocks / 2, chi_square / 2)
-    frequency_test_conclusion = (p_Value > 0.01)
+    frequency_test_conclusion = (p_Value >= 0.01)
     if frequency_test_conclusion:
         return f"Последовательность чисел является случайной, статус прохождения теста frequency_test_within_a_Block_2: {frequency_test_conclusion}"
     if not frequency_test_conclusion:
@@ -65,12 +69,14 @@ def run_test_3(bit_string, bit_string_length):
     for i in range(1, bit_string_length):
         if bit_string[i] != bit_string[i - 1]:
             observedNumber += 1
-    p_Value = sp.erfc(abs(observedNumber - 2 * bit_string_length * proportionOf1 * (1 - proportionOf1)) / (2 * (2 * bit_string_length) ** 0.5 * proportionOf1 * ( 1 - proportionOf1)))
-    run_test_conclusion = (p_Value > 0.01)
+    p_Value = sp.erfc(abs(observedNumber - 2 * bit_string_length * proportionOf1 * (1 - proportionOf1)) / (
+            2 * (2 * bit_string_length) ** 0.5 * proportionOf1 * (1 - proportionOf1)))
+    run_test_conclusion = (p_Value >= 0.01)
     if run_test_conclusion:
         return f"Последовательность чисел является случайной, статус прохождения теста run_test_3: {run_test_conclusion}"
     if not run_test_conclusion:
         return f"Последовательность чисел не  является случайной, статус прохождения теста run_test_3: {run_test_conclusion}"
+
 
 def run_test_within_a_Block_4(bit_string, bit_string_length):
     def longest_run_of_ones(bit_string):
@@ -84,6 +90,7 @@ def run_test_within_a_Block_4(bit_string, bit_string_length):
             else:
                 current_run = 0
         return max_run
+
     block_size = 8
     number_of_blocks = bit_string_length // block_size  # Число блоков
     if number_of_blocks == 0:
@@ -111,22 +118,26 @@ def run_test_within_a_Block_4(bit_string, bit_string_length):
         else:
             v[6] += 1
     proportionOf1 = [0.2857, 0.4286, 0.2143, 0.0714, 0.0143, 0.0014, 0.0001]  # Обновлена для блока 8 бит
-    chi_square = sum([(v[i] - number_of_blocks * proportionOf1[i]) ** 2 / (number_of_blocks * proportionOf1[i]) for i in range(7)])
+    chi_square = sum(
+        [(v[i] - number_of_blocks * proportionOf1[i]) ** 2 / (number_of_blocks * proportionOf1[i]) for i in range(7)])
     p_Value = sp.gammaincc(6 / 2, chi_square / 2)
-    test_within_a_Block_conclusion = (p_Value > 0.01)
+    test_within_a_Block_conclusion = (p_Value >= 0.01)
     if test_within_a_Block_conclusion:
         return f"Последовательность чисел является случайной, статус прохождения теста run_test_within_a_Block_4 : {test_within_a_Block_conclusion}"
     else:
         return f"Последовательность чисел не является случайной, статус прохождения теста run_test_within_a_Block_4: {test_within_a_Block_conclusion}"
 
+
 def binary_matrix_rank_test_5(bit_string):
     M = 4
     Q = 4
     numberOfBitBlocks = 8
+
     def rank(binary_matrix):
         _, u = lu(binary_matrix, permute_l=True)
         rank = np.sum(np.abs(np.diag(u)) > 1e-10)
         return rank
+
     prob_full_rank = 0.2888
     prob_one_less_rank = 0.5776
     prob_two_less_rank = 0.1336
@@ -152,11 +163,27 @@ def binary_matrix_rank_test_5(bit_string):
     chi_square_stat += ((one_less_rank_count - expected_one_less_rank) ** 2) / expected_one_less_rank
     chi_square_stat += ((two_less_rank_count - expected_two_less_rank) ** 2) / expected_two_less_rank
     p_Value = 1 - chi2.cdf(chi_square_stat, df=2)
-    test_within_a_Block_conclusion = (p_Value > 0.01)
+    test_within_a_Block_conclusion = (p_Value >= 0.01)
     if test_within_a_Block_conclusion:
         return f"Последовательность чисел является случайной, статус прохождения теста binary_matrix_rank_test_5: {test_within_a_Block_conclusion}"
     else:
         return f"Последовательность чисел не является случайной, статус прохождения теста binary_matrix_rank_test_5: {test_within_a_Block_conclusion}"
+
+
+def discrete_fourier_transform_test_6(bit_string, bit_string_length):
+    bit_array = np.array([1 if bit == '1' else -1 for bit in bit_string])
+    s = fft(bit_array)
+    modulus = np.abs(s[0:bit_string_length // 2])
+    threshold = np.sqrt(bit_string_length * np.log(1 / 0.05))
+    count_below_threshold = np.sum(modulus < threshold)
+    expected_count = 0.95 * (bit_string_length / 2)
+    dStat = (count_below_threshold - expected_count) / np.sqrt(bit_string_length * 0.95 * 0.05 / 4)
+    p_Value = erfc(np.abs(dStat) / np.sqrt(2))
+    test_discrete_fourier_transform_conclusion = (p_Value >= 0.01)
+    if test_discrete_fourier_transform_conclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста discrete_fourier_transform_test_6: {test_discrete_fourier_transform_conclusion}"
+    else:
+        return f"Последовательность чисел не является случайной, статус прохождения теста discrete_fourier_transform_test_6: {test_discrete_fourier_transform_conclusion}"
 
 
 random_numbers, bit_string, bit_string_length = get_random_numbers_local()
@@ -167,7 +194,13 @@ if bit_string is not None and bit_string_length is not None:
     print(frequency_test_1(bit_string, bit_string_length))
 else:
     print("Error: Could not perform frequency test due to invalid random number data")
+
 print(frequency_test_within_a_Block_2(bit_string))
+
 print(run_test_3(bit_string, bit_string_length))
-print( run_test_within_a_Block_4(bit_string, bit_string_length))
-print( binary_matrix_rank_test_5(bit_string))
+
+print(run_test_within_a_Block_4(bit_string, bit_string_length))
+
+print(binary_matrix_rank_test_5(bit_string))
+
+print(discrete_fourier_transform_test_6(bit_string, bit_string_length))
