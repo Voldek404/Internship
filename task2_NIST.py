@@ -1,10 +1,13 @@
 import requests
 import scipy.special as sp
 import random
+import numpy as np
+from scipy.linalg import lu
+from scipy.stats import chi2
 
 
 def get_random_numbers():
-    url = f"https://quantumnumbers.anu.edu.au/API/jsonI.php?length={7}&type=uint16"
+    url = f"https://qrng.anu.edu.au/API/jsonI.php?length=8&type=uint16"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
@@ -112,9 +115,48 @@ def run_test_within_a_Block_4(bit_string, bit_string_length):
     p_Value = sp.gammaincc(6 / 2, chi_square / 2)
     test_within_a_Block_conclusion = (p_Value > 0.01)
     if test_within_a_Block_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста run_test_within_a_Block : {test_within_a_Block_conclusion}"
+        return f"Последовательность чисел является случайной, статус прохождения теста run_test_within_a_Block_4 : {test_within_a_Block_conclusion}"
     else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста run_test_within_a_Bloc: {test_within_a_Block_conclusion}"
+        return f"Последовательность чисел не является случайной, статус прохождения теста run_test_within_a_Block_4: {test_within_a_Block_conclusion}"
+
+def binary_matrix_rank_test_5(bit_string):
+    M = 4
+    Q = 4
+    numberOfBitBlocks = 8
+    def rank(binary_matrix):
+        _, u = lu(binary_matrix, permute_l=True)
+        rank = np.sum(np.abs(np.diag(u)) > 1e-10)
+        return rank
+    prob_full_rank = 0.2888
+    prob_one_less_rank = 0.5776
+    prob_two_less_rank = 0.1336
+    full_rank_count = 0
+    one_less_rank_count = 0
+    two_less_rank_count = 0
+    for i in range(numberOfBitBlocks):
+        start = i * M * Q
+        end = start + M * Q
+        bit_block = bit_string[start:end]
+        matrix = np.array([int(bit) for bit in bit_block]).reshape(M, Q)
+        matrix_rank = rank(matrix)
+        if matrix_rank == min(M, Q):
+            full_rank_count += 1
+        elif matrix_rank == min(M, Q) - 1:
+            one_less_rank_count += 1
+        else:
+            two_less_rank_count += 1
+    expected_full_rank = numberOfBitBlocks * prob_full_rank
+    expected_one_less_rank = numberOfBitBlocks * prob_one_less_rank
+    expected_two_less_rank = numberOfBitBlocks * prob_two_less_rank
+    chi_square_stat = ((full_rank_count - expected_full_rank) ** 2) / expected_full_rank
+    chi_square_stat += ((one_less_rank_count - expected_one_less_rank) ** 2) / expected_one_less_rank
+    chi_square_stat += ((two_less_rank_count - expected_two_less_rank) ** 2) / expected_two_less_rank
+    p_Value = 1 - chi2.cdf(chi_square_stat, df=2)
+    test_within_a_Block_conclusion = (p_Value > 0.01)
+    if test_within_a_Block_conclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста binary_matrix_rank_test_5: {test_within_a_Block_conclusion}"
+    else:
+        return f"Последовательность чисел не является случайной, статус прохождения теста binary_matrix_rank_test_5: {test_within_a_Block_conclusion}"
 
 
 random_numbers, bit_string, bit_string_length = get_random_numbers_local()
@@ -128,3 +170,4 @@ else:
 print(frequency_test_within_a_Block_2(bit_string))
 print(run_test_3(bit_string, bit_string_length))
 print( run_test_within_a_Block_4(bit_string, bit_string_length))
+print( binary_matrix_rank_test_5(bit_string))
