@@ -185,8 +185,15 @@ def discrete_fourier_transform_test_6(bit_string, bit_string_length):
     else:
         return f"Последовательность чисел не является случайной, статус прохождения теста discrete_fourier_transform_test_6: {test_discrete_fourier_transform_conclusion}"
 
-
-random_numbers, bit_string, bit_string_length = get_random_numbers_local()
+print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
+choise = int(input())
+if choise == 1:
+    random_numbers, bit_string, bit_string_length = get_random_numbers()
+elif choise == 2:
+    random_numbers, bit_string, bit_string_length = get_random_numbers_local()
+else:
+    print("Некорректный номер источника случаных чисел")
+    
 print(f'Список полученных от сервера чисел {random_numbers}')
 print(f'Битовое представления последовательности чисел {bit_string}')
 print(f'Длина строки {bit_string_length}')
