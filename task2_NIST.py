@@ -184,6 +184,37 @@ def discrete_fourier_transform_test_6(bit_string, bit_string_length):
     else:
         return f"Последовательность чисел не является случайной, статус прохождения теста discrete_fourier_transform_test_6: {test_discrete_fourier_transform_conclusion}"
 
+
+def non_overlapping_template_machine_test7(bit_string, bit_string_length):
+    template = "111"
+    block_size = bit_string_length // numberOfBlocks
+    template_length = len(template)
+    occurrences = []
+    for i in range(numberOfBlocks):
+        block = bit_string[i * block_size:(i + 1) * block_size]
+        count = 0
+        j = 0
+        while j <= block_size - template_length:
+            if block[j:j + template_length] == template:
+                count += 1
+                j += template_length
+            else:
+                j += 1
+    occurrences.append(count)
+    M = block_size
+    m = template_length
+    mu = (M - m + 1) / (2 ** m)
+    sigma_squared = M * ((1 / 2 ** m) - (2 * m - 1) / 2 ** (2 * m))
+    chi_square = sum(((W_i - mu) ** 2) / sigma_squared for W_i in occurrences)
+    p_Value = sp.gammaincc(numberOfBlocks / 2, chi_square / 2)
+    v = (p_Value >= 0.01)
+    if non_overlapping_template_machine_conclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста non_overlapping_template_machine_conclusion_test_7: {non_overlapping_template_machine_conclusion}"
+    else:
+        return f"Последовательность чисел не является случайной, статус прохождения теста non_overlapping_template_machine_conclusion_test_7: {non_overlapping_template_machine_conclusion}"
+
+
+
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
 choise = int(input())
 if choise == 1:
@@ -192,7 +223,7 @@ elif choise == 2:
     random_numbers, bit_string, bit_string_length = get_random_numbers_local()
 else:
     print("Некорректный номер источника случаных чисел")
-    
+
 print(f'Список полученных от сервера чисел {random_numbers}')
 print(f'Битовое представления последовательности чисел {bit_string}')
 print(f'Длина строки {bit_string_length}')
@@ -210,3 +241,5 @@ print(run_test_within_a_Block_4(bit_string, bit_string_length))
 print(binary_matrix_rank_test_5(bit_string))
 
 print(discrete_fourier_transform_test_6(bit_string, bit_string_length))
+
+print(non_overlapping_template_machine_test7(bit_string, bit_string_length))
