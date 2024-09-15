@@ -215,6 +215,33 @@ def non_overlapping_template_machine_test7(bit_string, bit_string_length):
         return f"Последовательность чисел не является случайной, статус прохождения теста non_overlapping_template_machine_conclusion_test_7: {non_overlapping_template_machine_conclusion}"
 
 
+def overlapping_template_machine_test8(bit_string, bit_string_length):
+    template = "111"
+    numberOfBitBlocks = 8
+    block_size = bit_string_length // numberOfBitBlocks
+    template_length = len(template)
+    K = 5  # количество степеней свободы
+    lambda_val = (block_size - template_length + 1) / 2 ** template_length
+    pi = [np.exp(-lambda_val) * lambda_val ** i / np.math.factorial(i) for i in range(K)]
+    pi.append(1 - sum(pi))
+    def count_overlapping_template(block, template):
+        count = 0
+        for i in range(len(block) - len(template) + 1):
+            if block[i:i + len(template)] == template:
+                count += 1
+        return count
+    blocks = [bit_string[i * block_size:(i + 1) * block_size] for i in range(numberOfBitBlocks)]
+    observed_counts = [count_overlapping_template(block, template) for block in blocks]
+    F = np.bincount(observed_counts, minlength=K + 1)
+    expected_counts = [numberOfBitBlocks * p for p in pi]
+    chi_square = sum((F[i] - expected_counts[i]) ** 2 / expected_counts[i] for i in range(K + 1))
+    p_Value = sp.gammaincc(K / 2, chi_square / 2)
+    overlapping_template_machine_conclusion = (p_Value >= 0.01)
+    if overlapping_template_machine_conclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста overlapping_template_machine_conclusion_test_8: {overlapping_template_machine_conclusion},{p_Value}"
+    else:
+        return f"Последовательность чисел не является случайной, статус прохождения теста overlapping_template_machine_conclusion_test_8: {overlapping_template_machine_conclusion}"
+
 
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
 choise = int(input())
@@ -244,3 +271,5 @@ print(binary_matrix_rank_test_5(bit_string))
 print(discrete_fourier_transform_test_6(bit_string, bit_string_length))
 
 print(non_overlapping_template_machine_test7(bit_string, bit_string_length))
+
+print(overlapping_template_machine_test8(bit_string, bit_string_length))
