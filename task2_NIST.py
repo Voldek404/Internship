@@ -224,12 +224,14 @@ def overlapping_template_machine_test8(bit_string, bit_string_length):
     lambda_val = (block_size - template_length + 1) / 2 ** template_length
     pi = [np.exp(-lambda_val) * lambda_val ** i / np.math.factorial(i) for i in range(K)]
     pi.append(1 - sum(pi))
+
     def count_overlapping_template(block, template):
         count = 0
         for i in range(len(block) - len(template) + 1):
             if block[i:i + len(template)] == template:
                 count += 1
         return count
+
     blocks = [bit_string[i * block_size:(i + 1) * block_size] for i in range(numberOfBitBlocks)]
     observed_counts = [count_overlapping_template(block, template) for block in blocks]
     F = np.bincount(observed_counts, minlength=K + 1)
@@ -241,6 +243,35 @@ def overlapping_template_machine_test8(bit_string, bit_string_length):
         return f"Последовательность чисел является случайной, статус прохождения теста overlapping_template_machine_conclusion_test_8: {overlapping_template_machine_conclusion},{p_Value}"
     else:
         return f"Последовательность чисел не является случайной, статус прохождения теста overlapping_template_machine_conclusion_test_8: {overlapping_template_machine_conclusion}"
+
+
+def universal_statistical_test_9(bit_string, bit_string_length):
+    if bit_string_length < 387840:
+        raise ValueError("The bit string length must be at least 387,840 bits.")
+    L = 7
+    Q = 1280
+    K = bit_string_length // L - Q
+    table = [-1] * (2 ** L)
+    for i in range(Q):
+        block_value = int(bit_string[i * L:(i + 1) * L], 2)
+        table[block_value] = i
+    sum_val = 0.0
+    for i in range(Q, Q + K):
+        block_value = int(bit_string[i * L:(i + 1) * L], 2)
+        last_position = table[block_value]
+        table[block_value] = i
+        if last_position != -1:
+            sum_val += math.log2(i - last_position)
+    fn = sum_val / K
+    expected_value = 7.1836656  # Для L = 7
+    variance = 3.238
+    test_statistic = (fn - expected_value) / math.sqrt(variance)
+    p_Value = math.erfc(abs(test_statistic) / math.sqrt(2))
+    universal_statistical_test_conclusion = (p_Value >= 0.01)
+    if universal_statistical_test_conclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_test_conclusion},{p_Value}"
+    else:
+        return f"Последовательность чисел не является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_test_conclusion}"
 
 
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
