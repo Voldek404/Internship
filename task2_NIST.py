@@ -274,6 +274,53 @@ def universal_statistical_test_9(bit_string, bit_string_length):
         return f"Последовательность чисел не является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_test_conclusion}"
 
 
+def serial_test_10(bit_string: str, bit_string_length: int):
+    # Определение длины подстроки m (например, log2(bit_string_length) - 2)
+    m = max(2, math.floor(math.log2(bit_string_length)) - 2)
+    # Минимальная длина последовательности для Serial Test
+    if bit_string_length < 2 ** m:
+        raise ValueError(f"Длина битовой последовательности должна быть больше {2 ** m} для m = {m}.")
+    # Проверка на целостность битовой строки и ее соответствие заявленной длине
+    if len(bit_string) != bit_string_length:
+        raise ValueError("Длина битовой строки не соответствует указанной длине.")
+    # Вспомогательная функция для подсчета частот всех подстрок длины m
+    def count_patterns(bit_string, m):
+        pattern_count = {}
+        for i in range(2 ** m):
+            pattern = bin(i)[2:].zfill(m)
+            pattern_count[pattern] = 0
+        for i in range(bit_string_length - m + 1):
+            substring = bit_string[i:i + m]
+            pattern_count[substring] += 1
+        return pattern_count
+    # Частоты для подстрок длины m, m-1 и m-2
+    V_m = count_patterns(bit_string, m)
+    V_m_1 = count_patterns(bit_string, m - 1)
+    V_m_2 = count_patterns(bit_string, m - 2)
+    # Подсчет статистик теста
+    def compute_stat(V, m):
+        N = bit_string_length
+        sum_v = sum(v ** 2 for v in V.values())
+        return (sum_v - N) / N
+    # Вычисление статистики теста
+    psi_m = compute_stat(V_m, m)
+    psi_m_1 = compute_stat(V_m_1, m - 1)
+    psi_m_2 = compute_stat(V_m_2, m - 2)
+    # Статистика Serial Test
+    delta_psi_m = psi_m - psi_m_1
+    delta_psi_m_1 = psi_m_1 - psi_m_2
+    # Вычисление p-value через неполное гамма-распределение
+    def compute_p_value(statistic, df):
+        # Вычисление гамма-функции и неполного гамма-распределения
+        chi2_stat = statistic * (bit_string_length / 2)
+        return 1 - sp.gammainc(df / 2, chi2_stat / 2)
+    df_m = 2 ** m - 1
+    df_m_1 = 2 ** (m - 1) - 1
+    p_value_1 = compute_p_value(delta_psi_m, df_m)
+    p_value_2 = compute_p_value(delta_psi_m_1, df_m_1)
+    return p_value_1, p_value_2
+
+
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
 choise = int(input())
 if choise == 1:
