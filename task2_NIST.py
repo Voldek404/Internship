@@ -8,80 +8,82 @@ from scipy.fftpack import fft
 from scipy.special import erfc
 
 
-def get_random_numbers():
+def getRandomNumbers():
     url = f"https://qrng.anu.edu.au/API/jsonI.php?length=8&type=uint16"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
         if data['success']:
-            random_numbers = data['data']
-            bit_string = ''.join(format(num, '016b') for num in random_numbers)
-            bit_string_length = len(bit_string)
-            return random_numbers, bit_string, bit_string_length
+            randomNumbers = data['data']
+            bitString = ''.join(format(num, '016b') for num in randomNumbers)
+            bitStringLength = len(bitString)
+            return randomNumbers, bitString, bitStringLength
         else:
             return None, None, None
     else:
         return f"Error: HTTP {response.status_code}"
 
 
-def get_random_numbers_local():
-    random_numbers = [random.randint(0, 65535) for _ in range(8)]
-    bit_string = ''.join(format(num, '016b') for num in random_numbers)
-    bit_string_length = len(bit_string)
-    return random_numbers, bit_string, bit_string_length
+def getRandomNumbersLocal():
+    randomNumbers = [random.randint(0, 65535) for _ in range(8)]
+    bitString = ''.join(format(num, '016b') for num in randomNumbers)
+    bitStringLength = len(bitString)
+    return randomNumbers, bitString, bitStringLength
 
 
-def frequency_test_1(bit_string, bit_string_length):
-    numbers = [-1 if bit == '0' else 1 for bit in bit_string]
+def frequencyTest_1(bitString, bitStringLength):
+    numbers = [-1 if bit == '0' else 1 for bit in bitString]
     nth_PatrialSum = sum(numbers)
-    observedValue = abs(nth_PatrialSum) / (bit_string_length) ** 0.5
-    p_Value = sp.erfc(observedValue / 2 ** 0.5)
-    frequency_test_conclusion = (p_Value >= 0.01)
-    if frequency_test_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста frequency_test_1 : {frequency_test_conclusion}"
-    if not frequency_test_conclusion:
-        return f"Последовательность чисел не  является случайной, статус прохождения теста frequency_test_1: {frequency_test_conclusion}"
+    observedValue = abs(nth_PatrialSum) / (bitStringLength) ** 0.5
+    pValue = sp.erfc(observedValue / 2 ** 0.5)
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #1 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #1 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def frequency_test_within_a_Block_2(bit_string):
+def frequencyWithinABlockTest_2(bitString):
     block_size = 16
-    number_of_blocks = 8
+    numberOfBlocks = 8
     pi_values = []
-    for i in range(number_of_blocks):
-        block = bit_string[i * block_size:(i + 1) * block_size]
+    for i in range(numberOfBlocks):
+        block = bitString[i * block_size:(i + 1) * block_size]
         pi_i = block.count('1') / block_size
         pi_values.append(pi_i)
     chi_square = 4 * block_size * sum((pi_i - 0.5) ** 2 for pi_i in pi_values)
-    p_Value = sp.gammaincc(number_of_blocks / 2, chi_square / 2)
-    frequency_test_conclusion = (p_Value >= 0.01)
-    if frequency_test_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста frequency_test_within_a_Block_2: {frequency_test_conclusion}"
-    if not frequency_test_conclusion:
-        return f"Последовательность чисел не  является случайной, статус прохождения теста frequency_test_within_a_Block_2: {frequency_test_conclusion}"
+    pValue = sp.gammaincc(numberOfBlocks / 2, chi_square / 2)
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #2 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #2 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def run_test_3(bit_string, bit_string_length):
-    numberOf1 = bit_string.count('1')
-    proportionOf1 = numberOf1 / bit_string_length
-    tau = 2 / bit_string_length ** 0.5
+def runTest_3(bitString, bitStringLength):
+    numberOf1 = bitString.count('1')
+    proportionOf1 = numberOf1 / bitStringLength
+    tau = 2 / bitStringLength ** 0.5
     observedNumber = 1
-    for i in range(1, bit_string_length):
-        if bit_string[i] != bit_string[i - 1]:
+    for i in range(1, bitStringLength):
+        if bitString[i] != bitString[i - 1]:
             observedNumber += 1
-    p_Value = sp.erfc(abs(observedNumber - 2 * bit_string_length * proportionOf1 * (1 - proportionOf1)) / (
-            2 * (2 * bit_string_length) ** 0.5 * proportionOf1 * (1 - proportionOf1)))
-    run_test_conclusion = (p_Value >= 0.01)
-    if run_test_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста run_test_3: {run_test_conclusion}"
-    if not run_test_conclusion:
-        return f"Последовательность чисел не  является случайной, статус прохождения теста run_test_3: {run_test_conclusion}"
+    pValue = sp.erfc(abs(observedNumber - 2 * bitStringLength * proportionOf1 * (1 - proportionOf1)) / (
+            2 * (2 * bitStringLength) ** 0.5 * proportionOf1 * (1 - proportionOf1)))
+    testConclusion = (pValue >= 0.01)
+    if tau <= (proportionOf1 - 0.5):
+        return f"Test_3 is not applicable. tau <= |pi - 0.5|. "
+    if testConclusion:
+        return f"Numbers are random. Test #3 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #3 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def run_test_within_a_Block_4(bit_string, bit_string_length):
-    def longest_run_of_ones(bit_string):
+def runWithinABlockTest_4(bitString, bitStringLength):
+    def longest_run_of_ones(bitString):
         max_run = 0
         current_run = 0
-        for bit in bit_string:
+        for bit in bitString:
             if bit == '1':
                 current_run += 1
                 if current_run > max_run:
@@ -91,13 +93,13 @@ def run_test_within_a_Block_4(bit_string, bit_string_length):
         return max_run
 
     block_size = 8
-    number_of_blocks = bit_string_length // block_size  # Число блоков
-    if number_of_blocks == 0:
+    numberOfBlocks = bitStringLength // block_size  # Число блоков
+    if numberOfBlocks == 0:
         return "Ошибка: длина битовой строки слишком мала для выбранного размера блока."
-    bit_string = bit_string[:number_of_blocks * block_size]
+    bitString = bitString[:numberOfBlocks * block_size]
     max_runs = []
-    for i in range(number_of_blocks):
-        block = bit_string[i * block_size:(i + 1) * block_size]
+    for i in range(numberOfBlocks):
+        block = bitString[i * block_size:(i + 1) * block_size]
         max_run = longest_run_of_ones(block)
         max_runs.append(max_run)
     v = [0] * 7
@@ -118,16 +120,16 @@ def run_test_within_a_Block_4(bit_string, bit_string_length):
             v[6] += 1
     proportionOf1 = [0.2857, 0.4286, 0.2143, 0.0714, 0.0143, 0.0014, 0.0001]  # Обновлена для блока 8 бит
     chi_square = sum(
-        [(v[i] - number_of_blocks * proportionOf1[i]) ** 2 / (number_of_blocks * proportionOf1[i]) for i in range(7)])
-    p_Value = sp.gammaincc(6 / 2, chi_square / 2)
-    test_within_a_Block_conclusion = (p_Value >= 0.01)
-    if test_within_a_Block_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста run_test_within_a_Block_4 : {test_within_a_Block_conclusion}"
-    else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста run_test_within_a_Block_4: {test_within_a_Block_conclusion}"
+        [(v[i] - numberOfBlocks * proportionOf1[i]) ** 2 / (numberOfBlocks * proportionOf1[i]) for i in range(7)])
+    pValue = sp.gammaincc(6 / 2, chi_square / 2)
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #4 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #4 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def binary_matrix_rank_test_5(bit_string):
+def binary_matrix_rank_test_5(bitString):
     M = 4
     Q = 4
     numberOfBitBlocks = 8
@@ -146,7 +148,7 @@ def binary_matrix_rank_test_5(bit_string):
     for i in range(numberOfBitBlocks):
         start = i * M * Q
         end = start + M * Q
-        bit_block = bit_string[start:end]
+        bit_block = bitString[start:end]
         matrix = np.array([int(bit) for bit in bit_block]).reshape(M, Q)
         matrix_rank = rank(matrix)
         if matrix_rank == min(M, Q):
@@ -161,38 +163,38 @@ def binary_matrix_rank_test_5(bit_string):
     chi_square_stat = ((full_rank_count - expected_full_rank) ** 2) / expected_full_rank
     chi_square_stat += ((one_less_rank_count - expected_one_less_rank) ** 2) / expected_one_less_rank
     chi_square_stat += ((two_less_rank_count - expected_two_less_rank) ** 2) / expected_two_less_rank
-    p_Value = 1 - chi2.cdf(chi_square_stat, df=2)
-    test_within_a_Block_conclusion = (p_Value >= 0.01)
-    if test_within_a_Block_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста binary_matrix_rank_test_5: {test_within_a_Block_conclusion}"
-    else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста binary_matrix_rank_test_5: {test_within_a_Block_conclusion}"
+    pValue = 1 - chi2.cdf(chi_square_stat, df=2)
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #5 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #5 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def discrete_fourier_transform_test_6(bit_string, bit_string_length):
-    bit_array = np.array([1 if bit == '1' else -1 for bit in bit_string])
+def discreteFourierTransformTest_6(bitString, bitStringLength):
+    bit_array = np.array([1 if bit == '1' else -1 for bit in bitString])
     s = fft(bit_array)
-    modulus = np.abs(s[0:bit_string_length // 2])
-    threshold = np.sqrt(bit_string_length * np.log(1 / 0.05))
+    modulus = np.abs(s[0:bitStringLength // 2])
+    threshold = np.sqrt(bitStringLength * np.log(1 / 0.05))
     count_below_threshold = np.sum(modulus < threshold)
-    expected_count = 0.95 * (bit_string_length / 2)
-    dStat = (count_below_threshold - expected_count) / np.sqrt(bit_string_length * 0.95 * 0.05 / 4)
-    p_Value = erfc(np.abs(dStat) / np.sqrt(2))
-    test_discrete_fourier_transform_conclusion = (p_Value >= 0.01)
-    if test_discrete_fourier_transform_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста discrete_fourier_transform_test_6: {test_discrete_fourier_transform_conclusion}"
-    else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста discrete_fourier_transform_test_6: {test_discrete_fourier_transform_conclusion}"
+    expected_count = 0.95 * (bitStringLength / 2)
+    dStat = (count_below_threshold - expected_count) / np.sqrt(bitStringLength * 0.95 * 0.05 / 4)
+    pValue = erfc(np.abs(dStat) / np.sqrt(2))
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #6 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #6 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def non_overlapping_template_machine_test7(bit_string, bit_string_length):
+def non_overlapping_template_machine_test7(bitString, bitStringLength):
     template = "111"
     numberOfBitBlocks = 8
-    block_size = bit_string_length // numberOfBitBlocks
+    block_size = bitStringLength // numberOfBitBlocks
     template_length = len(template)
     occurrences = []
     for i in range(numberOfBitBlocks):
-        block = bit_string[i * block_size:(i + 1) * block_size]
+        block = bitString[i * block_size:(i + 1) * block_size]
         count = 0
         j = 0
         while j <= block_size - template_length:
@@ -207,18 +209,18 @@ def non_overlapping_template_machine_test7(bit_string, bit_string_length):
     mu = (M - m + 1) / (2 ** m)
     sigma_squared = M * ((1 / 2 ** m) - (2 * m - 1) / 2 ** (2 * m))
     chi_square = sum(((W_i - mu) ** 2) / sigma_squared for W_i in occurrences)
-    p_Value = sp.gammaincc(numberOfBitBlocks / 2, chi_square / 2)
-    non_overlapping_template_machine_conclusion = (p_Value >= 0.01)
-    if non_overlapping_template_machine_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста non_overlapping_template_machine_conclusion_test_7: {non_overlapping_template_machine_conclusion}"
-    else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста non_overlapping_template_machine_conclusion_test_7: {non_overlapping_template_machine_conclusion}"
+    pValue = sp.gammaincc(numberOfBitBlocks / 2, chi_square / 2)
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #7 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #7 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def overlapping_template_machine_test8(bit_string, bit_string_length):
+def overlappingTemplateMachineTest_8(bitString, bitStringLength):
     template = "111"
     numberOfBitBlocks = 8
-    block_size = bit_string_length // numberOfBitBlocks
+    block_size = bitStringLength // numberOfBitBlocks
     template_length = len(template)
     K = 5  # количество степеней свободы
     lambda_val = (block_size - template_length + 1) / 2 ** template_length
@@ -232,32 +234,32 @@ def overlapping_template_machine_test8(bit_string, bit_string_length):
                 count += 1
         return count
 
-    blocks = [bit_string[i * block_size:(i + 1) * block_size] for i in range(numberOfBitBlocks)]
+    blocks = [bitString[i * block_size:(i + 1) * block_size] for i in range(numberOfBitBlocks)]
     observed_counts = [count_overlapping_template(block, template) for block in blocks]
     F = np.bincount(observed_counts, minlength=K + 1)
     expected_counts = [numberOfBitBlocks * p for p in pi]
     chi_square = sum((F[i] - expected_counts[i]) ** 2 / expected_counts[i] for i in range(K + 1))
-    p_Value = sp.gammaincc(K / 2, chi_square / 2)
-    overlapping_template_machine_conclusion = (p_Value >= 0.01)
-    if overlapping_template_machine_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста overlapping_template_machine_conclusion_test_8: {overlapping_template_machine_conclusion},{p_Value}"
-    else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста overlapping_template_machine_conclusion_test_8: {overlapping_template_machine_conclusion}"
+    pValue = sp.gammaincc(K / 2, chi_square / 2)
+    testConclusion = (pValue >= 0.01)
+    if testConclusion:
+        return f"Numbers are random. Test #8 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    if not testConclusion:
+        return f"Numbers are not  random. Test #8 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
-def universal_statistical_test_9(bit_string, bit_string_length):
-    if bit_string_length < 387840:
+def universal_statistical_test_9(bitString, bitStringLength):
+    if bitStringLength < 387840:
         raise ValueError("The bit string length must be at least 387,840 bits.")
     L = 7
     Q = 1280
-    K = bit_string_length // L - Q
+    K = bitStringLength // L - Q
     table = [-1] * (2 ** L)
     for i in range(Q):
-        block_value = int(bit_string[i * L:(i + 1) * L], 2)
+        block_value = int(bitString[i * L:(i + 1) * L], 2)
         table[block_value] = i
     sum_val = 0.0
     for i in range(Q, Q + K):
-        block_value = int(bit_string[i * L:(i + 1) * L], 2)
+        block_value = int(bitString[i * L:(i + 1) * L], 2)
         last_position = table[block_value]
         table[block_value] = i
         if last_position != -1:
@@ -266,19 +268,18 @@ def universal_statistical_test_9(bit_string, bit_string_length):
     expected_value = 7.1836656  # Для L = 7
     variance = 3.238
     test_statistic = (fn - expected_value) / math.sqrt(variance)
-    p_Value = math.erfc(abs(test_statistic) / math.sqrt(2))
-    universal_statistical_test_conclusion = (p_Value >= 0.01)
-    if universal_statistical_test_conclusion:
-        return f"Последовательность чисел является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_test_conclusion},{p_Value}"
+    pValue = math.erfc(abs(test_statistic) / math.sqrt(2))
+    universal_statistical_testConclusion = (pValue >= 0.01)
+    if universal_statistical_testConclusion:
+        return f"Последовательность чисел является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_testConclusion},{pValue}"
     else:
-        return f"Последовательность чисел не является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_test_conclusion}"
+        return f"Последовательность чисел не является случайной, статус прохождения теста universal_statistical_test_9: {universal_statistical_testConclusion}"
 
-
-def linear_complexity_test_10(bit_string, bit_string_length):
+def linear_complexity_test_10(bitString, bitStringLength):
     M = 500  # длина блока
-    if bit_string_length < M:
+    if bitStringLength < M:
         raise ValueError("Длина битовой строки должна быть не менее 500 бит.")
-    N = bit_string_length // M  # количество блоков
+    N = bitStringLength // M  # количество блоков
     expected_complexity = M / 2 + (9 + (-1) ** M) / 36
 
     # Функция для вычисления линейной сложности (алгоритм Берлекэмпа-Мэсси)
@@ -301,43 +302,43 @@ def linear_complexity_test_10(bit_string, bit_string_length):
         return L
 
     # Разбиваем строку на блоки и вычисляем линейную сложность для каждого блока
-    blocks = [bit_string[i * M:(i + 1) * M] for i in range(N)]
+    blocks = [bitString[i * M:(i + 1) * M] for i in range(N)]
     complexities = [berlekamp_massey_algorithm([int(bit) for bit in block]) for block in blocks]
     # Подсчет хи-квадрат статистики
     T = [(complexity - expected_complexity) for complexity in complexities]
     chi_square = sum([(t ** 2) / (M / 2) for t in T])
-    p_value = sp.gammaincc(N / 2, chi_square / 2)
+    pValue = sp.gammaincc(N / 2, chi_square / 2)
 
 
-def serial_test_11(bit_string: str, bit_string_length: int):
-    # Определение длины подстроки m (например, log2(bit_string_length) - 2)
-    m = max(2, math.floor(math.log2(bit_string_length)) - 2)
+def serial_test_11(bitString: str, bitStringLength: int):
+    # Определение длины подстроки m (например, log2(bitStringLength) - 2)
+    m = max(2, math.floor(math.log2(bitStringLength)) - 2)
     # Минимальная длина последовательности для Serial Test
-    if bit_string_length < 2 ** m:
+    if bitStringLength < 2 ** m:
         raise ValueError(f"Длина битовой последовательности должна быть больше {2 ** m} для m = {m}.")
     # Проверка на целостность битовой строки и ее соответствие заявленной длине
-    if len(bit_string) != bit_string_length:
+    if len(bitString) != bitStringLength:
         raise ValueError("Длина битовой строки не соответствует указанной длине.")
 
     # Вспомогательная функция для подсчета частот всех подстрок длины m
-    def count_patterns(bit_string, m):
+    def count_patterns(bitString, m):
         pattern_count = {}
         for i in range(2 ** m):
             pattern = bin(i)[2:].zfill(m)
             pattern_count[pattern] = 0
-        for i in range(bit_string_length - m + 1):
-            substring = bit_string[i:i + m]
+        for i in range(bitStringLength - m + 1):
+            substring = bitString[i:i + m]
             pattern_count[substring] += 1
         return pattern_count
 
     # Частоты для подстрок длины m, m-1 и m-2
-    V_m = count_patterns(bit_string, m)
-    V_m_1 = count_patterns(bit_string, m - 1)
-    V_m_2 = count_patterns(bit_string, m - 2)
+    V_m = count_patterns(bitString, m)
+    V_m_1 = count_patterns(bitString, m - 1)
+    V_m_2 = count_patterns(bitString, m - 2)
 
     # Подсчет статистик теста
     def compute_stat(V, m):
-        N = bit_string_length
+        N = bitStringLength
         sum_v = sum(v ** 2 for v in V.values())
         return (sum_v - N) / N
 
@@ -350,45 +351,44 @@ def serial_test_11(bit_string: str, bit_string_length: int):
     delta_psi_m_1 = psi_m_1 - psi_m_2
 
     # Вычисление p-value через неполное гамма-распределение
-    def compute_p_value(statistic, df):
+    def compute_pValue(statistic, df):
         # Вычисление гамма-функции и неполного гамма-распределения
-        chi2_stat = statistic * (bit_string_length / 2)
+        chi2_stat = statistic * (bitStringLength / 2)
         return 1 - sp.gammainc(df / 2, chi2_stat / 2)
 
     df_m = 2 ** m - 1
     df_m_1 = 2 ** (m - 1) - 1
-    p_value_1 = compute_p_value(delta_psi_m, df_m)
-    p_value_2 = compute_p_value(delta_psi_m_1, df_m_1)
-    return p_value_1, p_value_2
-
+    pValue_1 = compute_pValue(delta_psi_m, df_m)
+    pValue_2 = compute_pValue(delta_psi_m_1, df_m_1)
+    return pValue_1, pValue_2
 
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
 choise = int(input())
 if choise == 1:
-    random_numbers, bit_string, bit_string_length = get_random_numbers()
+    randomNumbers, bitString, bitStringLength = getRandomNumbers()
 elif choise == 2:
-    random_numbers, bit_string, bit_string_length = get_random_numbers_local()
+    randomNumbers, bitString, bitStringLength = getRandomNumbersLocal()
 else:
     print("Некорректный номер источника случаных чисел")
 
-print(f'Список полученных от сервера чисел {random_numbers}')
-print(f'Битовое представления последовательности чисел {bit_string}')
-print(f'Длина строки {bit_string_length}')
-if bit_string is not None and bit_string_length is not None:
-    print(frequency_test_1(bit_string, bit_string_length))
+print(f'Список полученных от сервера чисел {randomNumbers}')
+print(f'Битовое представления последовательности чисел {bitString}')
+print(f'Длина строки {bitStringLength}')
+if bitString is not None and bitStringLength is not None:
+    print(frequencyTest_1(bitString, bitStringLength))
 else:
     print("Error: Could not perform frequency test due to invalid random number data")
 
-print(frequency_test_within_a_Block_2(bit_string))
+print(frequencyWithinABlockTest_2(bitString))
 
-print(run_test_3(bit_string, bit_string_length))
+print(runTest_3(bitString, bitStringLength))
 
-print(run_test_within_a_Block_4(bit_string, bit_string_length))
+print(runWithinABlockTest_4(bitString, bitStringLength))
 
-print(binary_matrix_rank_test_5(bit_string))
+print(binary_matrix_rank_test_5(bitString))
 
-print(discrete_fourier_transform_test_6(bit_string, bit_string_length))
+print(discreteFourierTransformTest_6(bitString, bitStringLength))
 
-print(non_overlapping_template_machine_test7(bit_string, bit_string_length))
+print(non_overlapping_template_machine_test7(bitString, bitStringLength))
 
-print(overlapping_template_machine_test8(bit_string, bit_string_length))
+print(overlappingTemplateMachineTest_8(bitString, bitStringLength))
