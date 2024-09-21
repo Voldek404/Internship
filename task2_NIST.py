@@ -362,6 +362,35 @@ def serial_test_11(bitString: str, bitStringLength: int):
     pValue_2 = compute_pValue(delta_psi_m_1, df_m_1)
     return pValue_1, pValue_2
 
+
+def approximateEntropyTest_12(bitString, bitStringLength, m=2):
+    if bitStringLength < 100:
+        raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
+    def calculate_frequency(pattern_length):
+        counts = {}
+        for i in range(bitStringLength):
+            pattern = bitString[i:i + pattern_length]
+            if len(pattern) < pattern_length:
+                pattern += bitString[:pattern_length - len(pattern)]
+            if pattern in counts:
+                counts[pattern] += 1
+            else:
+                counts[pattern] = 1
+        total_patterns = bitStringLength
+        for key in counts:
+            counts[key] /= total_patterns
+        return counts
+    P_m = calculate_frequency(m)
+    P_m1 = calculate_frequency(m + 1)
+    def calculate_entropy(pattern_counts):
+        return sum([-p * math.log(p, 2) for p in pattern_counts.values() if p > 0])
+    entropy_m = calculate_entropy(P_m)
+    entropy_m1 = calculate_entropy(P_m1)
+    approx_entropy = entropy_m - entropy_m1
+    chi_square = 2 * bitStringLength * (math.log(2) - approx_entropy)
+    pValue = sp.gammaincc(2 ** (m - 1), chi_square / 2)
+    
+
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library")
 choise = int(input())
 if choise == 1:
