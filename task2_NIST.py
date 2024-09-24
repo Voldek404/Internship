@@ -31,9 +31,16 @@ def getRandomNumbers(randomNumbersQRNG):
         return None, None, None
 
 
-def getRandomNumbersLocal(randomNumbersLocal):
+def getRandomNumbersLocal(randomNumbersLocal: int):
     randomNumbers = [random.randint(0, 65535) for _ in range(randomNumbersLocal)]
     bitString = ''.join(format(num, '016b') for num in randomNumbers)
+    bitStringLength = len(bitString)
+    return randomNumbers, bitString, bitStringLength
+
+
+def getRandomNumbersUser(dataNumbers: list):
+    randomNumbers = dataNumbers
+    bitString = ''.join(format( int(num) , '016b') for int(num) in randomNumbers)
     bitStringLength = len(bitString)
     return randomNumbers, bitString, bitStringLength
 
@@ -496,7 +503,7 @@ def cumulativeSumsTest_13(bitString: str, bitStringLength: int):
         return pValue
 
     pValueForward = calcPValue(cumulativeSum)
-    pValueBackward = calcPValue(cumulativeSum[::-1])  # обратный тест
+    pValueBackward = calcPValue(cumulativeSum[::-1])
     testConclusion = (pValueForward >= 0.01 and pValueBackward >= 0.01)
     if testConclusion:
         return f"Numbers are random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
@@ -537,11 +544,11 @@ def randomExcursionTest_14(bitString: str, bitStringLength: int):
         variance = total_cycles * (1 - 1.0 / (2 * abs(state))) if state != 0 else 0
         if variance > 0:
             chiSquareValue = (observedVisits - expectedVisits) ** 2 / variance
-            pValue = sp.gammaincc(0.5, chiSquareValue / 2.0)  # Используем функцию неполной гаммы
+            pValue = round(sp.gammaincc(0.5, chiSquareValue / 2.0), 5)
             chiSquare[state] = chiSquareValue
         else:
             chiSquare[state] = 0
-            pValue = 0.0  # Если нет данных для подсчета дисперсии, p-value равно 0
+            pValue = 0.0
         pValues[state] = pValue
     testConclusion = all(p > 0.01 for p in pValues.values())
     if testConclusion:
@@ -584,7 +591,7 @@ def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
         variance = total_cycles * (1 - 1.0 / (2 * abs(state))) if state != 0 else 0
         if variance > 0:
             chiSquareValue = (observedVisits - expectedVisits) ** 2 / variance
-            pValue = sp.erfc(math.sqrt(chiSquareValue / 2.0))
+            pValue = round(sp.erfc(math.sqrt(chiSquareValue / 2.0)), 5)
             chiSquare[state] = chiSquareValue
         else:
             chiSquare[state] = 0
@@ -597,18 +604,20 @@ def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
         return f"Numbers are not  random. Test #15 status : {testConclusion}, pValues: {pValues}"
 
 
-print("Введите номер источника случайных чисел. 1 - QRNG, 2 - random library, 3 - Пользовательские данные")
-choise = int(input())
-if choise == 1:
+print("Введите номер источника случайных чисел. 1 - QRNG, 2 - PRNG 3 - Пользовательские данные")
+source_choise = int(input())
+if source_choise == 1:
     print('Введите количество чисел')
     randomNumbersQRNG = int(input())
     randomNumbers, bitString, bitStringLength = getRandomNumbers(randomNumbersQRNG)
-elif choise == 2:
+elif source_choise == 2:
     print('Введите количество чисел')
     randomNumbersLocal = int(input())
     randomNumbers, bitString, bitStringLength = getRandomNumbersLocal(randomNumbersLocal)
-elif choise == 3:
-    randomNumbers, bitString, bitStringLength = getRandomNumbersLocal()
+elif source_choise == 3:
+    print('Введите последовательность 16-и битных  чисел через запятую ')
+    dataNumbers = list(input())
+    randomNumbers, bitString, bitStringLength = getRandomNumbersUser(dataNumbers)
 else:
     print("Некорректный номер источника случайных чисел")
 
