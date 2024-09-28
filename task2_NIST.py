@@ -9,14 +9,12 @@ from scipy.special import erfc
 import math
 
 
-def getRandomNumbers(randomNumbersQRNG):
-    url = f"https://qrng.anu.edu.au/API/jsonI.php?length={randomNumbersQRNG}&type=uint16"
+def getRandomNumbers(randomNumbersQRNG: int):
     try:
-        response = requests.get(url, timeout=180)
-        response.raise_for_status()
-        data = response.json()
-        if data['success']:
-            randomNumbers = data['data']
+        url = f"https://www.random.org/integers/?num={randomNumbersQRNG}&min=0&max=65535&col=1&base=10&format=plain&rnd=new"
+        response = requests.get(url)
+        if response.status_code == 200:
+            randomNumbers = list(map(int, response.text.strip().split()))
             bitString = ''.join(format(num, '016b') for num in randomNumbers)
             bitStringLength = len(bitString)
             return randomNumbers, bitString, bitStringLength
@@ -38,16 +36,24 @@ def getRandomNumbersLocal(randomNumbersLocal: int):
     return randomNumbers, bitString, bitStringLength
 
 
-def getRandomNumbersUser(dataNumbers: list):
-    randomNumbers = dataNumbers
-    bitString = ''.join(format( int(num) , '016b') for int(num) in randomNumbers)
-    bitStringLength = len(bitString)
-    return randomNumbers, bitString, bitStringLength
+def getRandomNumbersUser(dataNumbers: str):
+    try:
+        dataNumbers = [int(num.strip()) for num in dataNumbers.split(',')]
+        bitString = ''.join(format(int(num), '016b') for num in dataNumbers)
+        return dataNumbers, bitString, len(bitString)
+    except ValueError:
+        pass
+    if all(char in '01' for char in dataNumbers):
+        blockSize = 16
+        bitString = dataNumbers
+        dataNumbers = [int(bitString[i:i + blockSize], 2) for i in range(0, len(bitString), blockSize)]
+        return dataNumbers, bitString, len(bitString)
+    else:
+        raise ValueError("Входные данные не являются ни последовательностью чисел, ни битовой строкой.")
 
 
 def frequencyTest_1(bitString: str, bitStringLength: int):
     try:
-        # Проверка длины битовой строки
         if len(bitString) < 100:
             raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
@@ -364,8 +370,11 @@ def universalStatisticalTest_9(bitString: str, bitStringLength: int):
 
 def linearComplexityTest_10(bitString, bitStringLength):
     M = 500
-    if bitStringLength < M:
-        raise ValueError("Длина битовой строки должна быть не менее 500 бит.")
+    try:
+        if len(bitString) < 500:
+            raise ValueError("Длина битовой строки должна быть не менее 387840 бит.")
+    except ValueError as e:
+        return f"Ошибка: {e}, Test #10 False"
     N = bitStringLength // M
     expected_complexity = M / 2 + (9 + (-1) ** M) / 36
 
@@ -607,16 +616,13 @@ def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - PRNG 3 - Пользовательские данные")
 source_choise = int(input())
 if source_choise == 1:
-    print('Введите количество чисел')
-    randomNumbersQRNG = int(input())
+    randomNumbersQRNG = int(input('Введите количество чисел: '))
     randomNumbers, bitString, bitStringLength = getRandomNumbers(randomNumbersQRNG)
 elif source_choise == 2:
-    print('Введите количество чисел')
-    randomNumbersLocal = int(input())
+    randomNumbersLocal = int(input('Введите количество чисел: '))
     randomNumbers, bitString, bitStringLength = getRandomNumbersLocal(randomNumbersLocal)
 elif source_choise == 3:
-    print('Введите последовательность 16-и битных  чисел через запятую ')
-    dataNumbers = list(input())
+    dataNumbers = input('Введите последовательность 16-и битных чисел через запятую или битовую строку: ')
     randomNumbers, bitString, bitStringLength = getRandomNumbersUser(dataNumbers)
 else:
     print("Некорректный номер источника случайных чисел")
