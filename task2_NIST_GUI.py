@@ -6,9 +6,10 @@ from scipy.linalg import lu
 from scipy.stats import chi2
 from scipy.fftpack import fft
 from scipy.special import erfc
+from scipy.special import gammaincc
 import math
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import messagebox, filedialog, font
 
 
 def getRandomNumbers(randomNumbersQRNG: int):
@@ -453,38 +454,29 @@ def approximateEntropyTest_12(bitString, bitStringLength):
             raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
         return f"Ошибка: {e}"
-    if bitStringLength < 500:
-        m = 2
-    elif bitStringLength < 2000:
-        m = 3
-    else:
-        m = 4
+    bits = np.array([int(bit) for bit in bitString], dtype=int)
+    blocks_length = min(2, max(3, int(math.floor(math.log(bits.size, 2))) - 6))
 
-    def calculate_frequency(pattern_length):
-        counts = {}
-        for i in range(bitStringLength):
-            pattern = bitString[i:i + pattern_length]
-            if len(pattern) < pattern_length:
-                pattern += bitString[:pattern_length - len(pattern)]
-            counts[pattern] = counts.get(pattern, 0) + 1
-        total_patterns = bitStringLength
-        for key in counts:
-            counts[key] /= total_patterns  # нормируем частоты
-        return counts
+    def patternToInt(bit_pattern):
+        result = 0
+        for bit in bit_pattern:
+            result = (result << 1) + bit
+        return result
 
-    P_m = calculate_frequency(m)
-    P_m1 = calculate_frequency(m + 1)
-
-    def calculate_entropy(patternCounts):
-        return sum([p * math.log(p, 2) for p in patternCounts.values() if p > 0])
-
-    entropy_m = calculate_entropy(P_m)
-    entropy_m1 = calculate_entropy(P_m1)
-    approx_entropy = entropy_m - entropy_m1
-    chiSquare = 2 * bitStringLength * (math.log(2) - approx_entropy)
-    if chiSquare < 0:
-        chiSquare = 0
-    pValue = sp.gammaincc(2 ** (m - 1), chiSquare / 2)
+    phi_m = []
+    for iteration in range(blocks_length, blocks_length + 2):
+        padded_bits = np.concatenate((bits, bits[0:iteration - 1]))
+        counts = np.zeros(2 ** iteration, dtype=int)
+        for i in range(2 ** iteration):
+            count = 0
+            for j in range(bits.size):
+                if patternToInt(padded_bits[j:j + iteration]) == i:
+                    count += 1
+            counts[i] = count
+        c_i = counts / float(bits.size)
+        phi_m.append(np.sum(c_i[c_i > 0.0] * np.log(c_i[c_i > 0.0])))
+    chiSquare = 2 * bits.size * (math.log(2) - (phi_m[0] - phi_m[1]))
+    pValue = gammaincc(2 ** (blocks_length - 1), (chiSquare / 2.0))
     testConclusion = (pValue >= 0.01)
     if testConclusion:
         return f"Numbers are random. Test #12 status : {testConclusion}, pValue: {round(pValue, 5)}"
@@ -498,74 +490,80 @@ def cumulativeSumsTest_13(bitString: str, bitStringLength: int):
             raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #13 False"
-    convertedBits = [1 if bit == '1' else -1 for bit in bitString]
-    cumulativeSum = [0] * bitStringLength
-    cumulativeSum[0] = convertedBits[0]
-    for i in range(1, bitStringLength):
-        cumulativeSum[i] = cumulativeSum[i - 1] + convertedBits[i]
+    bitString = np.array([int(bit) for bit in bitString], dtype=int)
+    bitString_copy = bitString.copy()
+    bitString[bitString == 0] = -1
+    forward_sum, backward_sum = 0, 0
+    forward_max, backward_max = 0, 0
+    for i in range(bitString_copy.size):
+        forward_sum += bitString_copy[i]
+        backward_sum += bitString_copy[bitString_copy.size - 1 - i]
+        forward_max = max(abs(forward_sum), forward_max)
+        backward_max = max(abs(backward_sum), backward_max)
 
-    def calcPValue(cumulativeSums):
-        maxDeviation = max([abs(x) for x in cumulativeSums])
-        pValue = 1.0
-        for k in np.arange((-bitStringLength // 2 - 3) / 4, (bitStringLength // 2 - 1) / 4, step=1):
-            term1 = erfc((4 * k + 1) * maxDeviation / math.sqrt(2 * bitStringLength))
-            term2 = erfc((4 * k - 1) * maxDeviation / math.sqrt(2 * bitStringLength))
-            pValue -= (term1 - term2)
-        return pValue
+    def computePValue(bitStringLength, max_excursion):
+        sum_a = 0.0
+        start_k = int(math.floor((((-bitStringLength / max_excursion) + 1.0) / 4.0)))
+        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
+        for k in range(start_k, end_k + 1):
+            c = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        d = 0.5 * erfc(-(((4.0 * k) - 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        sum_a += c - d
 
-    pValueForward = calcPValue(cumulativeSum)
-    pValueBackward = calcPValue(cumulativeSum[::-1])
+        sum_b = 0.0
+        start_k = int(math.floor((((-bitStringLength / max_excursion) - 3.0) / 4.0)))
+        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
+        for k in range(start_k, end_k + 1):
+            c = 0.5 * erfc(-(((4.0 * k) + 3.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        d = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        sum_b += c - d
+
+        return 1.0 - (sum_a + sum_b)
+
+    pValueForward = computePValue(bitString_copy.size, forward_max)
+    pValueBackWard = computePValue(bitString.size, backward_max)
     testConclusion = (pValueForward >= 0.01 and pValueBackward >= 0.01)
     if testConclusion:
         return f"Numbers are random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
     if not testConclusion:
-        return f"Numbers are not  random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
+        return f"Numbers are not  random. Test #13 status : {testConclusion}, pValue: {round(pValueBackWard, 5)}"
 
 
 def randomExcursionTest_14(bitString: str, bitStringLength: int):
-    try:
-        if bitStringLength < 1000:
-            raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
-    except ValueError as e:
-        return f"Ошибка: {e}, Test #14 False"
-    transformedBits = [1 if bit == '1' else -1 for bit in bitString]
-    cumulativeSums = [0]
-    for bit in transformedBits:
-        cumulativeSums.append(cumulativeSums[-1] + bit)
-    cycles = []
-    currentCycle = []
-    for i, value in enumerate(cumulativeSums):
-        currentCycle.append(value)
-        if value == 0 and len(currentCycle) > 1:
-            cycles.append(currentCycle)
-            currentCycle = []
-    if len(cycles) == 0:
-        raise ValueError("Последовательность не содержит циклов.")
-    states = [-4, -3, -2, -1, 1, 2, 3, 4]
-    stateVisits = {state: 0 for state in states}
-    for cycle in cycles:
-        for state in states:
-            stateVisits[state] += cycle.count(state)
-    pValues = {}
-    chiSquare = {}
-    total_cycles = len(cycles)
-    for state in states:
-        observedVisits = stateVisits[state]
-        expectedVisits = total_cycles * (1.0 / (2 * abs(state))) if state != 0 else 0
-        variance = total_cycles * (1 - 1.0 / (2 * abs(state))) if state != 0 else 0
-        if variance > 0:
-            chiSquareValue = (observedVisits - expectedVisits) ** 2 / variance
-            pValue = round(sp.gammaincc(0.5, chiSquareValue / 2.0), 5)
-            chiSquare[state] = chiSquareValue
+    stateX = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    mappedSequence = np.where(np.array(list(bitString), dtype=int) == 0, -1, 1)
+    cumulativeSum = np.cumsum(mappedSequence)
+    cumulativeSum = np.insert(cumulativeSum, 0, 0)
+    cumulativeSum = np.append(cumulativeSum, 0)
+    positionJumps = np.where(cumulativeSum == 0)[0]
+    cycleCount = len(positionJumps) - 1
+
+    if cycleCount == 0:
+        return None, 0.0, "NO CYCLES"
+    stateCounter = {x: [0] * cycleCount for x in stateX}
+    for cycle in range(cycleCount):
+        for value in cumulativeSum[positionJumps[cycle] + 1:positionJumps[cycle + 1]]:
+            if abs(value) in stateCounter:
+                stateCounter[abs(value)][cycle] += 1
+    pi = np.array([0.5, 0.75, 0.833333333333, 0.916666666667, 0.958333333333,
+                   0.983333333333, 0.991666666667, 0.995833333333, 0.997916666667])
+    results = {}
+    for state in stateX:
+        totalVisits = sum(stateCounter[state])
+        if totalVisits == 0:
+            p_value = 1.0
         else:
-            chiSquare[state] = 0
-            pValue = 0.0
-        pValues[state] = pValue
-    testConclusion = all(p > 0.01 for p in pValues.values())
+            chiSquared = sum(
+                [(stateCounter[state][cycle] - cycleCount * pi[min(state - 1, len(pi) - 1)]) ** 2 /
+                 (cycleCount * pi[min(state - 1, len(pi) - 1)]) for cycle in range(cycleCount)]
+            )
+            p_value = gammaincc((cycleCount / 2.0), chiSquared / 2.0)
+        results[state] = p_value
+    testConclusion = all(p > 0.01 for p in results.values())
     if testConclusion:
-        return f"Numbers are random. Test #14 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are random. Test #14 status : {testConclusion}, pValues: {results}"
     if not testConclusion:
-        return f"Numbers are not  random. Test #14 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are not  random. Test #14 status : {testConclusion}, pValues: {results}"
 
 
 def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
@@ -622,9 +620,8 @@ class NISTTestGUI:
 
         # Переменные для выбора источника
         self.source_choice = tk.StringVar(value="None")
-        self.bit_string = None
-        self.bit_string_length = None
-        self.random_numbers = None
+        self.bitString = None
+        self.bitStringLength = None
 
         # Создание флажков
         self.create_source_selection()
@@ -633,6 +630,7 @@ class NISTTestGUI:
         self.input_frame = tk.Frame(root)
         self.input_label = tk.Label(self.input_frame, text="")
         self.input_entry = tk.Entry(self.input_frame)
+        self.input_entry.bind("<Return>", self.on_enter)  # Реакция на нажатие Enter
         self.browse_button = tk.Button(self.input_frame, text="...", command=self.load_file)
         self.input_frame.pack(pady=10)
 
@@ -660,11 +658,15 @@ class NISTTestGUI:
         self.input_frame.pack_forget()
         self.input_frame.pack(pady=10)
 
-        if choice == "RNG" or choice == "PRNG":
+        if choice in ("RNG", "PRNG"):
             self.input_label.config(text="Введите количество чисел:")
             self.input_label.pack(side="left")
             self.input_entry.pack(side="left")
             self.browse_button.pack_forget()
+            if choice == "RNG":
+                self.input_entry.bind('<Return>', self.fetchRNGData)
+            elif choice == "PRNG":
+                self.input_entry.bind('<Return>', self.fetchPRNGData)
         elif choice == "Custom":
             self.input_label.config(text="Введите битовую строку или выберите файл:")
             self.input_label.pack(side="left")
@@ -675,39 +677,118 @@ class NISTTestGUI:
         filename = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
         if filename:
             with open(filename, 'r') as file:
+                content = file.read().strip()
                 self.input_entry.delete(0, tk.END)
-                self.input_entry.insert(0, file.read())
+                self.input_entry.insert(0, content)
+                self.adjust_entry_width(content)
+
+    def on_enter(self, event):
+        """Обработка нажатия Enter в поле ввода."""
+        input_data = self.input_entry.get()
+        if self.source_choice.get() in ("RNG", "PRNG"):
+            try:
+                self.bitStringLength = int(input_data)
+                self.bitString = None  # Сбрасываем битовую строку
+                self.result_text.insert(tk.END, f"Количество чисел установлено: {self.bitStringLength}\n")
+            except ValueError:
+                messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
+        elif self.source_choice.get() == "Custom":
+            self.bitString = input_data
+            self.bitStringLength = len(self.bitString)
+            self.adjust_entry_width(self.bitString)
+            self.result_text.insert(tk.END, f"Битовая строка установлена: {self.bitString}\n")
+
+    def fetchRNGData(self, event):
+        """Получение случайных чисел из QRNG."""
+        try:
+            randomNumbersQRNG = int(self.input_entry.get())
+            randomNumbers, self.bitString, self.bitStringLength = getRandomNumbers(randomNumbersQRNG)
+            self.result_text.insert(tk.END, f"Получено {randomNumbersQRNG} чисел из QRNG.\n")
+        except ValueError:
+            messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
+
+    def fetchPRNGData(self, event):
+        """Получение случайных чисел из PRNG."""
+        try:
+            numbersLocal = int(self.input_entry.get())
+            randomNumbers, self.bitString, self.bitStringLength = getRandomNumbersLocal(numbersLocal)
+            self.result_text.insert(tk.END, f"Получено {numbersLocal} чисел из PRNG.\n")
+        except ValueError:
+            messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
+
+    def load_file(self):
+        filename = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if filename:
+            with open(filename, 'r') as file:
+                dataNumbers = file.read().strip()
+                self.input_entry.delete(0, tk.END)
+                self.input_entry.insert(0, dataNumbers)
+                self.adjust_entry_width(dataNumbers)  # Устанавливаем ширину в зависимости от содержимого
+
+                # Вызываем getRandomNumbersUser для обработки содержимого
+                try:
+                    self.random_numbers, self.bitString, self.bitStringLength = getRandomNumbersUser(dataNumbers)
+                    self.result_text.insert(tk.END, f"Числа: {self.random_numbers}\n")
+                    self.result_text.insert(tk.END, f"Битовая строка: {self.bitString}\n")
+                    self.result_text.insert(tk.END, f"Длина битовой строки: {self.bitStringLength}\n")
+                except ValueError as e:
+                    messagebox.showerror("Ошибка", str(e))
+
+    def adjust_entry_width(self, content):
+        length = len(content)
+        self.input_entry.config(width=80 if length > 50 else 30)
 
     def execute_test(self, test_function):
-        if self.bit_string is not None and self.bit_string_length is not None:
-            result = test_function(self.bit_string, self.bit_string_length)
+        if self.bitString is not None and self.bitStringLength is not None:
+            result = test_function(self.bitString, self.bitStringLength)
             self.result_text.insert(tk.END, f"Result: {result}\n")
+            self.result_text.yview(tk.END)  # Автоматическая прокрутка вниз
         else:
-            messagebox.showerror("Error", "Недопустимые данные для выполнения теста.")
+            messagebox.showerror("Ошибка", "Недопустимые данные для выполнения теста.")
 
     def create_test_buttons(self):
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
 
-        # Создание кнопок для всех тестов
+        # Список тестов и их названий
         test_functions = [
-            frequencyTest_1, frequencyWithinABlockTest_2, runTest_3,
-            runWithinABlockTest_4, binaryMatrixRankTest_5, discreteFourierTransformTest_6,
-            nonOverlappingTemplateMachineTest_7, overlappingTemplateMachineTest_8,
-            universalStatisticalTest_9, linearComplexityTest_10, serialTest_11,
-            approximateEntropyTest_12, cumulativeSumsTest_13, randomExcursionTest_14,
-            randomExcursionVariantTest_15
+            ("Frequency Test (1)", frequencyTest_1),
+            ("Frequency Within a Block Test (2)", frequencyWithinABlockTest_2),
+            ("Run Test (3)", runTest_3),
+            ("Run Within a Block Test (4)", runWithinABlockTest_4),
+            ("Binary Matrix Rank Test (5)", binaryMatrixRankTest_5),
+            ("Discrete Fourier Transform Test (6)", discreteFourierTransformTest_6),
+            ("Non-overlapping Template Matching Test (7)", nonOverlappingTemplateMachineTest_7),
+            ("Overlapping Template Matching Test (8)", overlappingTemplateMachineTest_8),
+            ("Universal Statistical Test (9)", universalStatisticalTest_9),
+            ("Linear Complexity Test (10)", linearComplexityTest_10),
+            ("Serial Test (11)", serialTest_11),
+            ("Approximate Entropy Test (12)", approximateEntropyTest_12),
+            ("Cumulative Sums Test (13)", cumulativeSumsTest_13),
+            ("Random Excursion Test (14)", randomExcursionTest_14),
+            ("Random Excursion Variant Test (15)", randomExcursionVariantTest_15)
         ]
 
-        for i, test_function in enumerate(test_functions):
-            tk.Button(button_frame, text=f"Test {i + 1}", command=lambda f=test_function: self.execute_test(f)).pack(
-                side="left")
+        # Получение ширины кнопок на основе самого длинного названия
+        button_font = font.Font(family="Helvetica", size=10, weight="bold")
+        max_text_width = max([button_font.measure(name) for name, _ in test_functions]) // 10
+
+        # Размещение кнопок в формате 4x4
+        for i, (test_name, test_function) in enumerate(test_functions):
+            row, col = divmod(i, 4)
+            tk.Button(button_frame, text=test_name, width=max_text_width,
+                      command=lambda f=test_function: self.execute_test(f)).grid(row=row, column=col, padx=5, pady=5)
 
         # Кнопка для выполнения всех тестов
-        tk.Button(button_frame, text="All", command=self.run_all_tests).pack(side="left")
+        tk.Button(button_frame, text="All", command=self.run_all_tests, width=max_text_width).grid(row=4, column=1,
+                                                                                                   columnspan=2,
+                                                                                                   pady=10)
+
+        # Кнопка "Сброс"
+        tk.Button(button_frame, text="Сброс", command=self.reset, width=max_text_width).grid(row=4, column=3, pady=10)
 
     def run_all_tests(self):
-        if self.bit_string is not None and self.bit_string_length is not None:
+        if self.bitString is not None and self.bitStringLength is not None:
             for test in [
                 frequencyTest_1, frequencyWithinABlockTest_2, runTest_3,
                 runWithinABlockTest_4, binaryMatrixRankTest_5, discreteFourierTransformTest_6,
@@ -716,13 +797,23 @@ class NISTTestGUI:
                 approximateEntropyTest_12, cumulativeSumsTest_13, randomExcursionTest_14,
                 randomExcursionVariantTest_15
             ]:
-                result = test(self.bit_string, self.bit_string_length)
+                result = test(self.bitString, self.bitStringLength)
                 self.result_text.insert(tk.END, f"Result: {result}\n")
+                self.result_text.yview(tk.END)  # Автоматическая прокрутка вниз
         else:
-            messagebox.showerror("Error", "Недопустимые данные для выполнения тестов.")
+            messagebox.showerror("Ошибка", "Недопустимые данные для выполнения тестов.")
+
+    def reset(self):
+        """Сброс программы в начальное состояние."""
+        self.bitString = None
+        self.bitStringLength = None
+        self.source_choice.set("None")  # Сброс выбора источника
+        self.input_entry.delete(0, tk.END)  # Очистка поля ввода
+        self.result_text.delete(1.0, tk.END)  # Очистка текстового поля результатов
+        self.input_label.config(text="")  # Очистка метки ввода
 
 
-if name == "__main__":
+if __name__ == "__main__":
     root = tk.Tk()
     app = NISTTestGUI(root)
     root.mainloop()
