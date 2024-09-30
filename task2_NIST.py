@@ -6,6 +6,7 @@ from scipy.linalg import lu
 from scipy.stats import chi2
 from scipy.fftpack import fft
 from scipy.special import erfc
+from scipy.special import gammaincc
 import math
 
 
@@ -451,38 +452,29 @@ def approximateEntropyTest_12(bitString, bitStringLength):
             raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
         return f"Ошибка: {e}"
-    if bitStringLength < 500:
-        m = 2
-    elif bitStringLength < 2000:
-        m = 3
-    else:
-        m = 4
+    bits = np.array([int(bit) for bit in bitString], dtype=int)
+    blocks_length = min(2, max(3, int(math.floor(math.log(bits.size, 2))) - 6))
 
-    def calculate_frequency(pattern_length):
-        counts = {}
-        for i in range(bitStringLength):
-            pattern = bitString[i:i + pattern_length]
-            if len(pattern) < pattern_length:
-                pattern += bitString[:pattern_length - len(pattern)]
-            counts[pattern] = counts.get(pattern, 0) + 1
-        total_patterns = bitStringLength
-        for key in counts:
-            counts[key] /= total_patterns  # нормируем частоты
-        return counts
+    def patternToInt(bit_pattern):
+        result = 0
+        for bit in bit_pattern:
+            result = (result << 1) + bit
+        return result
 
-    P_m = calculate_frequency(m)
-    P_m1 = calculate_frequency(m + 1)
-
-    def calculate_entropy(patternCounts):
-        return sum([p * math.log(p, 2) for p in patternCounts.values() if p > 0])
-
-    entropy_m = calculate_entropy(P_m)
-    entropy_m1 = calculate_entropy(P_m1)
-    approx_entropy = entropy_m - entropy_m1
-    chiSquare = 2 * bitStringLength * (math.log(2) - approx_entropy)
-    if chiSquare < 0:
-        chiSquare = 0
-    pValue = sp.gammaincc(2 ** (m - 1), chiSquare / 2)
+    phi_m = []
+    for iteration in range(blocks_length, blocks_length + 2):
+        padded_bits = np.concatenate((bits, bits[0:iteration - 1]))
+        counts = np.zeros(2 ** iteration, dtype=int)
+        for i in range(2 ** iteration):
+            count = 0
+            for j in range(bits.size):
+                if patternToInt(padded_bits[j:j + iteration]) == i:
+                    count += 1
+            counts[i] = count
+        c_i = counts / float(bits.size)
+        phi_m.append(np.sum(c_i[c_i > 0.0] * np.log(c_i[c_i > 0.0])))
+    chiSquare = 2 * bits.size * (math.log(2) - (phi_m[0] - phi_m[1]))
+    pValue = gammaincc(2 ** (blocks_length - 1), (chiSquare / 2.0))
     testConclusion = (pValue >= 0.01)
     if testConclusion:
         return f"Numbers are random. Test #12 status : {testConclusion}, pValue: {round(pValue, 5)}"
@@ -496,74 +488,80 @@ def cumulativeSumsTest_13(bitString: str, bitStringLength: int):
             raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #13 False"
-    convertedBits = [1 if bit == '1' else -1 for bit in bitString]
-    cumulativeSum = [0] * bitStringLength
-    cumulativeSum[0] = convertedBits[0]
-    for i in range(1, bitStringLength):
-        cumulativeSum[i] = cumulativeSum[i - 1] + convertedBits[i]
+    bitString = np.array([int(bit) for bit in bitString], dtype=int)
+    bitString_copy = bitString.copy()
+    bitString[bitString == 0] = -1
+    forward_sum, backward_sum = 0, 0
+    forward_max, backward_max = 0, 0
+    for i in range(bitString_copy.size):
+        forward_sum += bitString_copy[i]
+        backward_sum += bitString_copy[bitString_copy.size - 1 - i]
+        forward_max = max(abs(forward_sum), forward_max)
+        backward_max = max(abs(backward_sum), backward_max)
 
-    def calcPValue(cumulativeSums):
-        maxDeviation = max([abs(x) for x in cumulativeSums])
-        pValue = 1.0
-        for k in np.arange((-bitStringLength // 2 - 3) / 4, (bitStringLength // 2 - 1) / 4, step=1):
-            term1 = erfc((4 * k + 1) * maxDeviation / math.sqrt(2 * bitStringLength))
-            term2 = erfc((4 * k - 1) * maxDeviation / math.sqrt(2 * bitStringLength))
-            pValue -= (term1 - term2)
-        return pValue
+    def computePValue(bitStringLength, max_excursion):
+        sum_a = 0.0
+        start_k = int(math.floor((((-bitStringLength / max_excursion) + 1.0) / 4.0)))
+        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
+        for k in range(start_k, end_k + 1):
+            c = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        d = 0.5 * erfc(-(((4.0 * k) - 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        sum_a += c - d
 
-    pValueForward = calcPValue(cumulativeSum)
-    pValueBackward = calcPValue(cumulativeSum[::-1])
+        sum_b = 0.0
+        start_k = int(math.floor((((-bitStringLength / max_excursion) - 3.0) / 4.0)))
+        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
+        for k in range(start_k, end_k + 1):
+            c = 0.5 * erfc(-(((4.0 * k) + 3.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        d = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
+        sum_b += c - d
+
+        return 1.0 - (sum_a + sum_b)
+
+    pValueForward = computePValue(bitString_copy.size, forward_max)
+    pValueBackWard = computePValue(bitString.size, backward_max)
     testConclusion = (pValueForward >= 0.01 and pValueBackward >= 0.01)
     if testConclusion:
         return f"Numbers are random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
     if not testConclusion:
-        return f"Numbers are not  random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
+        return f"Numbers are not  random. Test #13 status : {testConclusion}, pValue: {round(pValueBackWard, 5)}"
 
 
 def randomExcursionTest_14(bitString: str, bitStringLength: int):
-    try:
-        if bitStringLength < 1000:
-            raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
-    except ValueError as e:
-        return f"Ошибка: {e}, Test #14 False"
-    transformedBits = [1 if bit == '1' else -1 for bit in bitString]
-    cumulativeSums = [0]
-    for bit in transformedBits:
-        cumulativeSums.append(cumulativeSums[-1] + bit)
-    cycles = []
-    currentCycle = []
-    for i, value in enumerate(cumulativeSums):
-        currentCycle.append(value)
-        if value == 0 and len(currentCycle) > 1:
-            cycles.append(currentCycle)
-            currentCycle = []
-    if len(cycles) == 0:
-        raise ValueError("Последовательность не содержит циклов.")
-    states = [-4, -3, -2, -1, 1, 2, 3, 4]
-    stateVisits = {state: 0 for state in states}
-    for cycle in cycles:
-        for state in states:
-            stateVisits[state] += cycle.count(state)
-    pValues = {}
-    chiSquare = {}
-    total_cycles = len(cycles)
-    for state in states:
-        observedVisits = stateVisits[state]
-        expectedVisits = total_cycles * (1.0 / (2 * abs(state))) if state != 0 else 0
-        variance = total_cycles * (1 - 1.0 / (2 * abs(state))) if state != 0 else 0
-        if variance > 0:
-            chiSquareValue = (observedVisits - expectedVisits) ** 2 / variance
-            pValue = round(sp.gammaincc(0.5, chiSquareValue / 2.0), 5)
-            chiSquare[state] = chiSquareValue
+    stateX = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    mappedSequence = np.where(np.array(list(bitString), dtype=int) == 0, -1, 1)
+    cumulativeSum = np.cumsum(mappedSequence)
+    cumulativeSum = np.insert(cumulativeSum, 0, 0)
+    cumulativeSum = np.append(cumulativeSum, 0)
+    positionJumps = np.where(cumulativeSum == 0)[0]
+    cycleCount = len(positionJumps) - 1
+
+    if cycleCount == 0:
+        return None, 0.0, "NO CYCLES"
+    stateCounter = {x: [0] * cycleCount for x in stateX}
+    for cycle in range(cycleCount):
+        for value in cumulativeSum[positionJumps[cycle] + 1:positionJumps[cycle + 1]]:
+            if abs(value) in stateCounter:
+                stateCounter[abs(value)][cycle] += 1
+    pi = np.array([0.5, 0.75, 0.833333333333, 0.916666666667, 0.958333333333,
+                   0.983333333333, 0.991666666667, 0.995833333333, 0.997916666667])
+    results = {}
+    for state in stateX:
+        totalVisits = sum(stateCounter[state])
+        if totalVisits == 0:
+            p_value = 1.0
         else:
-            chiSquare[state] = 0
-            pValue = 0.0
-        pValues[state] = pValue
-    testConclusion = all(p > 0.01 for p in pValues.values())
+            chiSquared = sum(
+                [(stateCounter[state][cycle] - cycleCount * pi[min(state - 1, len(pi) - 1)]) ** 2 /
+                 (cycleCount * pi[min(state - 1, len(pi) - 1)]) for cycle in range(cycleCount)]
+            )
+            p_value = gammaincc((cycleCount / 2.0), chiSquared / 2.0)
+        results[state] = p_value
+    testConclusion = all(p > 0.01 for p in results.values())
     if testConclusion:
-        return f"Numbers are random. Test #14 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are random. Test #14 status : {testConclusion}, pValues: {results}"
     if not testConclusion:
-        return f"Numbers are not  random. Test #14 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are not  random. Test #14 status : {testConclusion}, pValues: {results}"
 
 
 def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
@@ -630,10 +628,7 @@ else:
 print(f'Список полученных от сервера чисел {randomNumbers}')
 print(f'Битовое представления последовательности чисел {bitString}')
 print(f'Длина строки {bitStringLength}')
-if bitString is not None and bitStringLength is not None:
-    print(frequencyTest_1(bitString, bitStringLength))
-else:
-    print("Error: Could not perform frequency test due to invalid random number data")
+print(frequencyTest_1(bitString, bitStringLength))
 
 print(frequencyWithinABlockTest_2(bitString, bitStringLength))
 
