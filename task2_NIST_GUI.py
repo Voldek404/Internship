@@ -617,35 +617,23 @@ class NISTTestGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("NIST Test GUI")
-
-        # Переменные для выбора источника
         self.source_choice = tk.StringVar(value="None")
         self.bitString = None
         self.bitStringLength = None
-
-        # Создание флажков
         self.create_source_selection()
-
-        # Поле ввода для количества чисел или битовой строки
         self.input_frame = tk.Frame(root)
         self.input_label = tk.Label(self.input_frame, text="")
-        self.input_entry = tk.Entry(self.input_frame)
+        self.input_entry = tk.Entry(self.input_frame, state='disabled')
         self.input_entry.bind("<Return>", self.on_enter)  # Реакция на нажатие Enter
         self.browse_button = tk.Button(self.input_frame, text="...", command=self.load_file)
         self.input_frame.pack(pady=10)
-
-        # Поле для результатов
-        self.result_text = tk.Text(root, height=20, width=80)
+        self.result_text = tk.Text(root, height=20, width=80, state='normal')
         self.result_text.pack()
-
-        # Кнопки для тестов
         self.create_test_buttons()
 
     def create_source_selection(self):
         frame = tk.Frame(self.root)
         frame.pack(pady=10)
-
-        # Флажки для выбора источника
         tk.Radiobutton(frame, text="RNG", variable=self.source_choice, value="RNG", command=self.toggle_input).pack(
             side="left")
         tk.Radiobutton(frame, text="PRNG", variable=self.source_choice, value="PRNG", command=self.toggle_input).pack(
@@ -654,10 +642,11 @@ class NISTTestGUI:
                        command=self.toggle_input).pack(side="left")
 
     def toggle_input(self):
+        self.input_entry.config(state='normal')
+        self.browse_button.config(state='normal')
         choice = self.source_choice.get()
         self.input_frame.pack_forget()
         self.input_frame.pack(pady=10)
-
         if choice in ("RNG", "PRNG"):
             self.input_label.config(text="Введите количество чисел:")
             self.input_label.pack(side="left")
@@ -683,7 +672,6 @@ class NISTTestGUI:
                 self.adjust_entry_width(content)
 
     def on_enter(self, event):
-        """Обработка нажатия Enter в поле ввода."""
         input_data = self.input_entry.get()
         if self.source_choice.get() in ("RNG", "PRNG"):
             try:
@@ -699,7 +687,6 @@ class NISTTestGUI:
             self.result_text.insert(tk.END, f"Битовая строка установлена: {self.bitString}\n")
 
     def fetchRNGData(self, event):
-        """Получение случайных чисел из QRNG."""
         try:
             randomNumbersQRNG = int(self.input_entry.get())
             randomNumbers, self.bitString, self.bitStringLength = getRandomNumbers(randomNumbersQRNG)
@@ -708,7 +695,6 @@ class NISTTestGUI:
             messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
 
     def fetchPRNGData(self, event):
-        """Получение случайных чисел из PRNG."""
         try:
             numbersLocal = int(self.input_entry.get())
             randomNumbers, self.bitString, self.bitStringLength = getRandomNumbersLocal(numbersLocal)
@@ -723,9 +709,8 @@ class NISTTestGUI:
                 dataNumbers = file.read().strip()
                 self.input_entry.delete(0, tk.END)
                 self.input_entry.insert(0, dataNumbers)
-                self.adjust_entry_width(dataNumbers)  # Устанавливаем ширину в зависимости от содержимого
+                self.adjust_entry_width(dataNumbers)
 
-                # Вызываем getRandomNumbersUser для обработки содержимого
                 try:
                     self.random_numbers, self.bitString, self.bitStringLength = getRandomNumbersUser(dataNumbers)
                     self.result_text.insert(tk.END, f"Числа: {self.random_numbers}\n")
@@ -749,8 +734,6 @@ class NISTTestGUI:
     def create_test_buttons(self):
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
-
-        # Список тестов и их названий
         test_functions = [
             ("Frequency Test (1)", frequencyTest_1),
             ("Frequency Within a Block Test (2)", frequencyWithinABlockTest_2),
@@ -769,23 +752,16 @@ class NISTTestGUI:
             ("Random Excursion Variant Test (15)", randomExcursionVariantTest_15)
         ]
 
-        # Получение ширины кнопок на основе самого длинного названия
-        button_font = font.Font(family="Helvetica", size=10, weight="bold")
+        button_font = font.Font(family="Helvetica", size=13, weight="bold")
         max_text_width = max([button_font.measure(name) for name, _ in test_functions]) // 10
-
-        # Размещение кнопок в формате 4x4
         for i, (test_name, test_function) in enumerate(test_functions):
-            row, col = divmod(i, 4)
+            row, col = divmod(i, 5)
             tk.Button(button_frame, text=test_name, width=max_text_width,
                       command=lambda f=test_function: self.execute_test(f)).grid(row=row, column=col, padx=5, pady=5)
-
-        # Кнопка для выполнения всех тестов
         tk.Button(button_frame, text="All", command=self.run_all_tests, width=max_text_width).grid(row=4, column=1,
-                                                                                                   columnspan=2,
+                                                                                                   columnspan=1,
                                                                                                    pady=10)
-
-        # Кнопка "Сброс"
-        tk.Button(button_frame, text="Сброс", command=self.reset, width=max_text_width).grid(row=4, column=3, pady=10)
+        tk.Button(button_frame, text="Restart", command=self.reset, width=max_text_width).grid(row=4, column=3, pady=10)
 
     def run_all_tests(self):
         if self.bitString is not None and self.bitStringLength is not None:
@@ -799,18 +775,17 @@ class NISTTestGUI:
             ]:
                 result = test(self.bitString, self.bitStringLength)
                 self.result_text.insert(tk.END, f"Result: {result}\n")
-                self.result_text.yview(tk.END)  # Автоматическая прокрутка вниз
+                self.result_text.yview(tk.END)
         else:
             messagebox.showerror("Ошибка", "Недопустимые данные для выполнения тестов.")
 
     def reset(self):
-        """Сброс программы в начальное состояние."""
         self.bitString = None
         self.bitStringLength = None
-        self.source_choice.set("None")  # Сброс выбора источника
-        self.input_entry.delete(0, tk.END)  # Очистка поля ввода
-        self.result_text.delete(1.0, tk.END)  # Очистка текстового поля результатов
-        self.input_label.config(text="")  # Очистка метки ввода
+        self.source_choice.set("None")
+        self.input_entry.delete(0, tk.END)
+        self.result_text.delete(1.0, tk.END)
+        self.input_label.config(text="")
 
 
 if __name__ == "__main__":
