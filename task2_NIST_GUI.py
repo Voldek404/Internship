@@ -727,7 +727,7 @@ class NISTTestGUI:
         if self.bitString is not None and self.bitStringLength is not None:
             result = test_function(self.bitString, self.bitStringLength)
             self.result_text.insert(tk.END, f"Result: {result}\n")
-            self.result_text.yview(tk.END)  # Автоматическая прокрутка вниз
+            self.result_text.yview(tk.END) 
         else:
             messagebox.showerror("Ошибка", "Недопустимые данные для выполнения теста.")
 
