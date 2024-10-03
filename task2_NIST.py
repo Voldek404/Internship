@@ -570,45 +570,23 @@ def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
             raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #15 False"
-    transformedBits = [1 if bit == '1' else -1 for bit in bitString]
-    cumulativeSums = [0]
-    for bit in transformedBits:
-        cumulativeSums.append(cumulativeSums[-1] + bit)
-    cycles = []
-    currentCycle = []
-    for i, value in enumerate(cumulativeSums):
-        currentCycle.append(value)
-        if value == 0 and len(currentCycle) > 1:
-            cycles.append(currentCycle)
-            currentCycle = []
-    if len(cycles) == 0:
-        raise ValueError("Последовательность не содержит циклов.")
-    states = list(range(-9, 10))
-    states.remove(0)
-    stateVisits = {state: 0 for state in states}
-    for cycle in cycles:
-        for state in states:
-            stateVisits[state] += cycle.count(state)
-    pValues = {}
-    chiSquare = {}
-    total_cycles = len(cycles)
-    for state in states:
-        observedVisits = stateVisits[state]
-        expectedVisits = total_cycles * (1.0 / (2 * abs(state))) if state != 0 else 0
-        variance = total_cycles * (1 - 1.0 / (2 * abs(state))) if state != 0 else 0
-        if variance > 0:
-            chiSquareValue = (observedVisits - expectedVisits) ** 2 / variance
-            pValue = round(sp.erfc(math.sqrt(chiSquareValue / 2.0)), 5)
-            chiSquare[state] = chiSquareValue
-        else:
-            chiSquare[state] = 0
-            pValue = 0.0
-        pValues[state] = pValue
-    testConclusion = all(p > 0.01 for p in pValues.values())
+    bitArray = np.array([int(bit) for bit in bitString])
+    if bitArray.size == 0:
+        return False, np.array([])
+    bitArray[bitArray == 0] = -1
+    sum_prime: np.ndarray = (np.concatenate((np.array([0]), np.cumsum(bitArray), np.array([0]))).astype(int))
+    cycles_size: int = np.count_nonzero(sum_prime[1:] == 0)
+    unique, counts = np.unique(sum_prime[abs(sum_prime) < 10], return_counts=True)
+    scores = []
+    for key, value in zip(unique, counts):
+         if key != 0:
+            scores.append(abs(value - cycles_size) / math.sqrt(2.0 * cycles_size * ((4.0 * abs(key)) - 2.0)))
+    scores = np.array(scores)
+    testConclusion = all(score >= 0.01 for score in scores)
     if testConclusion:
-        return f"Numbers are random. Test #15 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are random. Test #15 status : {testConclusion}, pValues: {scores}"
     if not testConclusion:
-        return f"Numbers are not  random. Test #15 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are not  random. Test #15 status : {testConclusion}, pValues: {scores}"
 
 
 print("Введите номер источника случайных чисел. 1 - QRNG, 2 - PRNG 3 - Пользовательские данные")
