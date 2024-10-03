@@ -37,16 +37,17 @@ def getRandomNumbersLocal(randomNumbersLocal: int):
     return randomNumbers, bitString, bitStringLength
 
 
+
 def getRandomNumbersUser(dataNumbers: str):
     try:
         dataNumbers = [int(num.strip()) for num in dataNumbers.split(',')]
-        bitString = ''.join(format(int(num), '016b') for num in dataNumbers)
+        bitString = ''.join(format(num, '016b') for num in dataNumbers)
         return dataNumbers, bitString, len(bitString)
     except ValueError:
         pass
-    if all(char in '01' for char in dataNumbers):
+    if all(char in '01' for char in dataNumbers.strip()):
         blockSize = 16
-        bitString = dataNumbers
+        bitString = dataNumbers.strip()
         dataNumbers = [int(bitString[i:i + blockSize], 2) for i in range(0, len(bitString), blockSize)]
         return dataNumbers, bitString, len(bitString)
     else:
