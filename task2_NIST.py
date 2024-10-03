@@ -37,7 +37,6 @@ def getRandomNumbersLocal(randomNumbersLocal: int):
     return randomNumbers, bitString, bitStringLength
 
 
-
 def getRandomNumbersUser(dataNumbers: str):
     try:
         dataNumbers = [int(num.strip()) for num in dataNumbers.split(',')]
