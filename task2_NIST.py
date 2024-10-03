@@ -484,47 +484,41 @@ def approximateEntropyTest_12(bitString, bitStringLength):
 
 def cumulativeSumsTest_13(bitString: str, bitStringLength: int):
     try:
-        if len(bitString) < 1000:
-            raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
+        if bitStringLength < 100:
+            raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #13 False"
     bitString = np.array([int(bit) for bit in bitString], dtype=int)
-    bitString_copy = bitString.copy()
     bitString[bitString == 0] = -1
-    forward_sum, backward_sum = 0, 0
-    forward_max, backward_max = 0, 0
-    for i in range(bitString_copy.size):
-        forward_sum += bitString_copy[i]
-        backward_sum += bitString_copy[bitString_copy.size - 1 - i]
-        forward_max = max(abs(forward_sum), forward_max)
-        backward_max = max(abs(backward_sum), backward_max)
+    cumulativeSum = np.cumsum(bitString)
+    cumulativeSumReverse = np.cumsum(bitString[::-1])
+    forward_max = max(abs(cumulativeSum))
+    backward_max = max(abs(cumulativeSumReverse))
 
     def computePValue(bitStringLength, max_excursion):
         sum_a = 0.0
-        start_k = int(math.floor((((-bitStringLength / max_excursion) + 1.0) / 4.0)))
-        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
-        for k in range(start_k, end_k + 1):
-            c = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        d = 0.5 * erfc(-(((4.0 * k) - 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        sum_a += c - d
-
         sum_b = 0.0
-        start_k = int(math.floor((((-bitStringLength / max_excursion) - 3.0) / 4.0)))
-        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
+        start_k = int(math.floor((-bitStringLength / max_excursion + 1.0) / 4.0))
+        end_k = int(math.floor((bitStringLength / max_excursion - 1.0) / 4.0))
         for k in range(start_k, end_k + 1):
-            c = 0.5 * erfc(-(((4.0 * k) + 3.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        d = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        sum_b += c - d
+            c = 0.5 * erfc((4.0 * k + 1.0) * max_excursion / bitStringLength ** 0.5)
+            d = 0.5 * erfc((4.0 * k - 1.0) * max_excursion / bitStringLength ** 0.5)
+            sum_a += +c - d
+        start_k = int(math.floor(((-bitStringLength / max_excursion) - 3.0) / 4.0))
+        end_k = int(math.floor((bitStringLength / max_excursion - 1.0) / 4.0))
+        for k in range(start_k, end_k + 1):
+            c = 0.5 * erfc((4.0 * k + 3.0) * max_excursion / bitStringLength ** 0.5)
+            d = 0.5 * erfc((4.0 * k + 1.0) * max_excursion / bitStringLength ** 0.5)
+            sum_b += c - d
+        return 1.0 - sum_a + sum_b
 
-        return 1.0 - (sum_a + sum_b)
-
-    pValueForward = computePValue(bitString_copy.size, forward_max)
-    pValueBackWard = computePValue(bitString.size, backward_max)
+    pValueForward = computePValue(bitStringLength, forward_max)
+    pValueBackward = computePValue(bitStringLength, backward_max)
     testConclusion = (pValueForward >= 0.01 and pValueBackward >= 0.01)
     if testConclusion:
-        return f"Numbers are random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #13 status : {testConclusion}, pValue: {round(pValueBackWard, 5)}"
+        return f"Numbers are random. Test #13 status: {testConclusion}, pValues: Forward = {round(pValueForward, 5)}, Backward = {round(pValueBackward, 5)}"
+    else:
+        return f"Numbers are not random. Test #13 status: {testConclusion}, pValues: Forward = {round(pValueForward, 5)}, Backward = {round(pValueBackward, 5)}"
 
 
 def randomExcursionTest_14(bitString: str, bitStringLength: int):
