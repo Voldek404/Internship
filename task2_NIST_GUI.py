@@ -673,10 +673,13 @@ class NISTTestGUI:
 
     def on_enter(self, event):
         input_data = self.input_entry.get()
+        if not input_data:
+            messagebox.showerror("Ошибка", "Ввод не может быть пустым. Пожалуйста, введите данные.")
+            return
         if self.source_choice.get() in ("RNG", "PRNG"):
             try:
                 self.bitStringLength = int(input_data)
-                self.bitString = None  # Сбрасываем битовую строку
+                self.bitString = None
                 self.result_text.insert(tk.END, f"Количество чисел установлено: {self.bitStringLength}\n")
             except ValueError:
                 messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
