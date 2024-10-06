@@ -21,9 +21,6 @@ def getRandomNumbers(randomNumbersQRNG: int):
             bitString = ''.join(format(num, '016b') for num in randomNumbers)
             bitStringLength = len(bitString)
             return randomNumbers, bitString, bitStringLength
-        else:
-            print("Ошибка при получении данных:", data.get('error', 'Неизвестная ошибка'))
-            return None, None, None
     except requests.Timeout:
         print("Ошибка: запрос превысил время ожидания.")
         return None, None, None
@@ -42,13 +39,13 @@ def getRandomNumbersLocal(randomNumbersLocal: int):
 def getRandomNumbersUser(dataNumbers: str):
     try:
         dataNumbers = [int(num.strip()) for num in dataNumbers.split(',')]
-        bitString = ''.join(format(int(num), '016b') for num in dataNumbers)
+        bitString = ''.join(format(num, '016b') for num in dataNumbers)
         return dataNumbers, bitString, len(bitString)
     except ValueError:
         pass
-    if all(char in '01' for char in dataNumbers):
+    if all(char in '01' for char in dataNumbers.strip()):
         blockSize = 16
-        bitString = dataNumbers
+        bitString = dataNumbers.strip()
         dataNumbers = [int(bitString[i:i + blockSize], 2) for i in range(0, len(bitString), blockSize)]
         return dataNumbers, bitString, len(bitString)
     else:
@@ -486,47 +483,41 @@ def approximateEntropyTest_12(bitString, bitStringLength):
 
 def cumulativeSumsTest_13(bitString: str, bitStringLength: int):
     try:
-        if len(bitString) < 1000:
-            raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
+        if bitStringLength < 100:
+            raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #13 False"
     bitString = np.array([int(bit) for bit in bitString], dtype=int)
-    bitString_copy = bitString.copy()
     bitString[bitString == 0] = -1
-    forward_sum, backward_sum = 0, 0
-    forward_max, backward_max = 0, 0
-    for i in range(bitString_copy.size):
-        forward_sum += bitString_copy[i]
-        backward_sum += bitString_copy[bitString_copy.size - 1 - i]
-        forward_max = max(abs(forward_sum), forward_max)
-        backward_max = max(abs(backward_sum), backward_max)
+    cumulativeSum = np.cumsum(bitString)
+    cumulativeSumReverse = np.cumsum(bitString[::-1])
+    forward_max = max(abs(cumulativeSum))
+    backward_max = max(abs(cumulativeSumReverse))
 
     def computePValue(bitStringLength, max_excursion):
         sum_a = 0.0
-        start_k = int(math.floor((((-bitStringLength / max_excursion) + 1.0) / 4.0)))
-        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
-        for k in range(start_k, end_k + 1):
-            c = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        d = 0.5 * erfc(-(((4.0 * k) - 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        sum_a += c - d
-
         sum_b = 0.0
-        start_k = int(math.floor((((-bitStringLength / max_excursion) - 3.0) / 4.0)))
-        end_k = int(math.floor((((bitStringLength / max_excursion) - 1.0) / 4.0)))
+        start_k = int(math.floor((-bitStringLength / max_excursion + 1.0) / 4.0))
+        end_k = int(math.floor((bitStringLength / max_excursion - 1.0) / 4.0))
         for k in range(start_k, end_k + 1):
-            c = 0.5 * erfc(-(((4.0 * k) + 3.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        d = 0.5 * erfc(-(((4.0 * k) + 1.0) * max_excursion) / math.sqrt(bitStringLength) * math.sqrt(0.5))
-        sum_b += c - d
+            c = 0.5 * erfc((4.0 * k + 1.0) * max_excursion / bitStringLength ** 0.5)
+            d = 0.5 * erfc((4.0 * k - 1.0) * max_excursion / bitStringLength ** 0.5)
+            sum_a += +c - d
+        start_k = int(math.floor(((-bitStringLength / max_excursion) - 3.0) / 4.0))
+        end_k = int(math.floor((bitStringLength / max_excursion - 1.0) / 4.0))
+        for k in range(start_k, end_k + 1):
+            c = 0.5 * erfc((4.0 * k + 3.0) * max_excursion / bitStringLength ** 0.5)
+            d = 0.5 * erfc((4.0 * k + 1.0) * max_excursion / bitStringLength ** 0.5)
+            sum_b += c - d
+        return 1.0 - sum_a + sum_b
 
-        return 1.0 - (sum_a + sum_b)
-
-    pValueForward = computePValue(bitString_copy.size, forward_max)
-    pValueBackWard = computePValue(bitString.size, backward_max)
+    pValueForward = computePValue(bitStringLength, forward_max)
+    pValueBackward = computePValue(bitStringLength, backward_max)
     testConclusion = (pValueForward >= 0.01 and pValueBackward >= 0.01)
     if testConclusion:
-        return f"Numbers are random. Test #13 status : {testConclusion}, pValue: {round(pValueForward, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #13 status : {testConclusion}, pValue: {round(pValueBackWard, 5)}"
+        return f"Numbers are random. Test #13 status: {testConclusion}, pValues: Forward = {round(pValueForward, 5)}, Backward = {round(pValueBackward, 5)}"
+    else:
+        return f"Numbers are not random. Test #13 status: {testConclusion}, pValues: Forward = {round(pValueForward, 5)}, Backward = {round(pValueBackward, 5)}"
 
 
 def randomExcursionTest_14(bitString: str, bitStringLength: int):
@@ -572,45 +563,23 @@ def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
             raise ValueError("Длина битовой строки должна быть не менее 1000 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #15 False"
-    transformedBits = [1 if bit == '1' else -1 for bit in bitString]
-    cumulativeSums = [0]
-    for bit in transformedBits:
-        cumulativeSums.append(cumulativeSums[-1] + bit)
-    cycles = []
-    currentCycle = []
-    for i, value in enumerate(cumulativeSums):
-        currentCycle.append(value)
-        if value == 0 and len(currentCycle) > 1:
-            cycles.append(currentCycle)
-            currentCycle = []
-    if len(cycles) == 0:
-        raise ValueError("Последовательность не содержит циклов.")
-    states = list(range(-9, 10))
-    states.remove(0)
-    stateVisits = {state: 0 for state in states}
-    for cycle in cycles:
-        for state in states:
-            stateVisits[state] += cycle.count(state)
-    pValues = {}
-    chiSquare = {}
-    total_cycles = len(cycles)
-    for state in states:
-        observedVisits = stateVisits[state]
-        expectedVisits = total_cycles * (1.0 / (2 * abs(state))) if state != 0 else 0
-        variance = total_cycles * (1 - 1.0 / (2 * abs(state))) if state != 0 else 0
-        if variance > 0:
-            chiSquareValue = (observedVisits - expectedVisits) ** 2 / variance
-            pValue = round(sp.erfc(math.sqrt(chiSquareValue / 2.0)), 5)
-            chiSquare[state] = chiSquareValue
-        else:
-            chiSquare[state] = 0
-            pValue = 0.0
-        pValues[state] = pValue
-    testConclusion = all(p > 0.01 for p in pValues.values())
+    bitArray = np.array([int(bit) for bit in bitString])
+    if bitArray.size == 0:
+        return False, np.array([])
+    bitArray[bitArray == 0] = -1
+    sum_prime: np.ndarray = (np.concatenate((np.array([0]), np.cumsum(bitArray), np.array([0]))).astype(int))
+    cycles_size: int = np.count_nonzero(sum_prime[1:] == 0)
+    unique, counts = np.unique(sum_prime[abs(sum_prime) < 10], return_counts=True)
+    scores = []
+    for key, value in zip(unique, counts):
+        if key != 0:
+            scores.append(abs(value - cycles_size) / math.sqrt(2.0 * cycles_size * ((4.0 * abs(key)) - 2.0)))
+    scores = np.array(scores)
+    testConclusion = all(score >= 0.01 for score in scores)
     if testConclusion:
-        return f"Numbers are random. Test #15 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are random. Test #15 status : {testConclusion}, pValues: {scores}"
     if not testConclusion:
-        return f"Numbers are not  random. Test #15 status : {testConclusion}, pValues: {pValues}"
+        return f"Numbers are not  random. Test #15 status : {testConclusion}, pValues: {scores}"
 
 
 class NISTTestGUI:
@@ -627,7 +596,9 @@ class NISTTestGUI:
         self.input_entry.bind("<Return>", self.on_enter)  # Реакция на нажатие Enter
         self.browse_button = tk.Button(self.input_frame, text="...", command=self.load_file)
         self.input_frame.pack(pady=10)
-        self.result_text = tk.Text(root, height=20, width=80, state='normal')
+
+        # Устанавливаем result_text в заблокированное состояние
+        self.result_text = tk.Text(root, height=20, width=80, state='disabled')
         self.result_text.pack()
         self.create_test_buttons()
 
@@ -662,15 +633,6 @@ class NISTTestGUI:
             self.input_entry.pack(side="left")
             self.browse_button.pack(side="left")
 
-    def load_file(self):
-        filename = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
-        if filename:
-            with open(filename, 'r') as file:
-                content = file.read().strip()
-                self.input_entry.delete(0, tk.END)
-                self.input_entry.insert(0, content)
-                self.adjust_entry_width(content)
-
     def on_enter(self, event):
         input_data = self.input_entry.get()
         if not input_data:
@@ -680,20 +642,22 @@ class NISTTestGUI:
             try:
                 self.bitStringLength = int(input_data)
                 self.bitString = None
-                self.result_text.insert(tk.END, f"Количество чисел установлено: {self.bitStringLength}\n")
+                self.append_text_to_result(f"Количество чисел установлено: {self.bitStringLength}\n")
             except ValueError:
                 messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
         elif self.source_choice.get() == "Custom":
             self.bitString = input_data
             self.bitStringLength = len(self.bitString)
             self.adjust_entry_width(self.bitString)
-            self.result_text.insert(tk.END, f"Битовая строка установлена: {self.bitString}\n")
+            self.append_text_to_result(f"Битовая строка установлена: {self.bitString}\n")
 
     def fetchRNGData(self, event):
         try:
             randomNumbersQRNG = int(self.input_entry.get())
             randomNumbers, self.bitString, self.bitStringLength = getRandomNumbers(randomNumbersQRNG)
-            self.result_text.insert(tk.END, f"Получено {randomNumbersQRNG} чисел из QRNG.\n")
+            self.append_text_to_result(f"Получено {randomNumbersQRNG} чисел из QRNG.\n")
+            self.append_text_to_result(f"Битовая строка: {self.bitString}.\n")
+            self.append_text_to_result(f"Длина битовой строки {self.bitStringLength}.\n")
         except ValueError:
             messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
 
@@ -701,7 +665,9 @@ class NISTTestGUI:
         try:
             numbersLocal = int(self.input_entry.get())
             randomNumbers, self.bitString, self.bitStringLength = getRandomNumbersLocal(numbersLocal)
-            self.result_text.insert(tk.END, f"Получено {numbersLocal} чисел из PRNG.\n")
+            self.append_text_to_result(f"Получено {numbersLocal} чисел из PRNG.\n")
+            self.append_text_to_result(f"Битовая строка: {self.bitString}.\n")
+            self.append_text_to_result(f"Длина битовой строки {self.bitStringLength}.\n")
         except ValueError:
             messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
 
@@ -713,24 +679,30 @@ class NISTTestGUI:
                 self.input_entry.delete(0, tk.END)
                 self.input_entry.insert(0, dataNumbers)
                 self.adjust_entry_width(dataNumbers)
-
                 try:
                     self.random_numbers, self.bitString, self.bitStringLength = getRandomNumbersUser(dataNumbers)
-                    self.result_text.insert(tk.END, f"Числа: {self.random_numbers}\n")
-                    self.result_text.insert(tk.END, f"Битовая строка: {self.bitString}\n")
-                    self.result_text.insert(tk.END, f"Длина битовой строки: {self.bitStringLength}\n")
+                    self.append_text_to_result(f"Числа: {self.random_numbers}\n")
+                    self.append_text_to_result(f"Битовая строка: {self.bitString}\n")
+                    self.append_text_to_result(f"Длина битовой строки: {self.bitStringLength}\n")
                 except ValueError as e:
-                    messagebox.showerror("Ошибка", str(e))
+                    messagebox.showerror("Ошибка", "Поле ввода пустое")
 
     def adjust_entry_width(self, content):
         length = len(content)
         self.input_entry.config(width=80 if length > 50 else 30)
 
+        # Функция для добавления текста в окно result_text
+
+    def append_text_to_result(self, text):
+        self.result_text.config(state='normal')  # Разблокируем окно для записи
+        self.result_text.insert(tk.END, text)  # Вставляем текст в конец
+        self.result_text.config(state='disabled')  # Блокируем снова, чтобы нельзя было редактировать
+
     def execute_test(self, test_function):
         if self.bitString is not None and self.bitStringLength is not None:
             result = test_function(self.bitString, self.bitStringLength)
-            self.result_text.insert(tk.END, f"Result: {result}\n")
-            self.result_text.yview(tk.END) 
+            self.append_text_to_result(f"Result: {result}\n")
+            self.result_text.yview(tk.END)  # Автоматическая прокрутка вниз
         else:
             messagebox.showerror("Ошибка", "Недопустимые данные для выполнения теста.")
 
@@ -776,19 +748,19 @@ class NISTTestGUI:
                 approximateEntropyTest_12, cumulativeSumsTest_13, randomExcursionTest_14,
                 randomExcursionVariantTest_15
             ]:
-                result = test(self.bitString, self.bitStringLength)
-                self.result_text.insert(tk.END, f"Result: {result}\n")
-                self.result_text.yview(tk.END)
+                self.execute_test(test)
         else:
-            messagebox.showerror("Ошибка", "Недопустимые данные для выполнения тестов.")
+            messagebox.showerror("Ошибка", "Пожалуйста, введите или выберите данные для анализа.")
 
     def reset(self):
-        self.bitString = None
-        self.bitStringLength = None
         self.source_choice.set("None")
         self.input_entry.delete(0, tk.END)
+        self.input_entry.config(state='disabled')
+        self.bitString = None
+        self.bitStringLength = None
+        self.result_text.config(state='normal')
         self.result_text.delete(1.0, tk.END)
-        self.input_label.config(text="")
+        self.result_text.config(state='disabled')
 
 
 if __name__ == "__main__":
