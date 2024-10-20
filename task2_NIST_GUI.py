@@ -6,10 +6,10 @@ from scipy.linalg import lu
 from scipy.stats import chi2
 from scipy.fftpack import fft
 from scipy.special import erfc
-from scipy.special import gammaincc
-import math
+from scipy.special import gammaincc, factorial
 import tkinter as tk
 from tkinter import messagebox, filedialog, font
+import math
 
 
 def getRandomNumbers(randomNumbersQRNG: int):
@@ -313,7 +313,7 @@ def overlappingTemplateMachineTest_8(bitString: str, bitStringLength: int):
     templateLength = len(template)
     K = 5  # количество степеней свободы
     lambda_val = (blockSize - templateLength + 1) / 2 ** templateLength
-    pi = [np.exp(-lambda_val) * lambda_val ** i / np.math.factorial(i) for i in range(K)]
+    pi = [np.exp(-lambda_val) * lambda_val ** i / factorial(i) for i in range(K)]
     pi.append(1 - sum(pi))
 
     def count_overlapping_template(block, template):
