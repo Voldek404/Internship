@@ -11,9 +11,12 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, font
 import math
 import tqdm
+from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import threading
 import queue
+import logging
+from multiprocessing import Manager
 
 
 def getRandomNumbers(randomNumbersQRNG: int):
@@ -58,19 +61,27 @@ def process_chunk(chunk):
     return data_numbers
 
 
+def to_16bit_binary(num):
+    if num < 0:
+        # Для отрицательных чисел применяем дополнительный код (two's complement)
+        return format((1 << 16) + num, '016b')  # Добавляем 2^16 для преобразования в дополнительный код
+    else:
+        # Для положительных чисел стандартное двоичное представление
+        return format(num, '016b')
+
 def getRandomNumbersUser(dataNumbers: str):
-    # Разбиваем данные на строки
+    # Убираем лишние пробелы с начала и конца строки, затем разделяем на строки
     lines = dataNumbers.strip().splitlines()
 
-    # Инициализируем список для чисел
-    dataNumbers = []
+    # Применяем strip() к каждой строке списка
+    dataNumbers = [line.strip() for line in lines]  # Здесь мы обрабатываем строки
 
     try:
         # Используем пул потоков для параллельной обработки данных
-        chunk_size = len(lines) // 4  # Разделяем данные на 4 части для 4 потоков
+        chunk_size = len(dataNumbers) // 4  # Разделяем данные на 4 части для 4 потоков
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Разбиваем данные на блоки
-            chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
+            chunks = [dataNumbers[i:i + chunk_size] for i in range(0, len(dataNumbers), chunk_size)]
 
             # Используем tqdm для отслеживания прогресса
             futures = [executor.submit(process_chunk, chunk) for chunk in chunks]
@@ -81,22 +92,13 @@ def getRandomNumbersUser(dataNumbers: str):
                                     desc="Обработка данных", unit="блок"):
                 dataNumbers.extend(future.result())  # Собираем результаты
 
-        # Форматируем числа в 16-битные строки
-        bitString = ''.join(format(num, '016b') for num in dataNumbers)
+        # Преобразуем числа в 16-битные строки, с учетом отрицательных чисел
+        bitString = ''.join(to_16bit_binary(num) for num in dataNumbers)
         return dataNumbers, bitString, len(bitString)
 
-    except ValueError:
-        pass  # Если не получилось преобразовать строку в число
-
-    # Если данные могут быть битовой строкой
-    if all(char in '01' for char in dataNumbers.strip()):
-        blockSize = 16
-        bitString = dataNumbers.strip()
-        dataNumbers = [int(bitString[i:i + blockSize], 2) for i in range(0, len(bitString), blockSize)]
-        return dataNumbers, bitString, len(bitString)
-
-    # Если не удается обработать данные
-    raise ValueError("Входные данные не являются ни последовательностью чисел, ни битовой строкой.")
+    except Exception as e:
+        logging.error(f"Ошибка при обработке данных: {e}")
+        raise
 
 
 def process_file_in_chunks(file_path):
@@ -123,26 +125,6 @@ def process_file_in_chunks(file_path):
     return dataNumbers, bitString, len(bitString)
 
 
-def process_file_in_chunks(file_path):
-    dataNumbers = []
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-
-    # Разделяем строки на блоки
-    chunk_size = len(lines) // 4  # 4 потока
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Разбиваем данные на блоки
-        chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
-        results = list(
-            tqdm.tqdm(executor.map(process_chunk, chunks), total=len(chunks), desc="Обработка файла", unit="блок"))
-
-    # Собираем все числа в один список
-    for result in results:
-        dataNumbers.extend(result)
-
-    # Преобразуем в битовую строку
-    bitString = ''.join(format(num, '016b') for num in dataNumbers)
-    return dataNumbers, bitString, len(bitString)
 
 
 
@@ -152,8 +134,8 @@ def frequencyTest_1(bitString: str, bitStringLength: int):
             raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #1 False"
-    numbers = [-1 if bit == '0' else 1 for bit in bitString]
-    nth_PatrialSum = sum(numbers)
+    numbers = np.array([1 if bit == '1' else -1 for bit in bitString])
+    nth_PatrialSum = np.sum(numbers)
     observedValue = abs(nth_PatrialSum) / (bitStringLength) ** 0.5
     pValue = sp.erfc(observedValue / 2 ** 0.5)
     testConclusion = (pValue >= 0.01)
@@ -171,11 +153,8 @@ def frequencyWithinABlockTest_2(bitString: str, bitStringLength: int):
         return f"Ошибка: {e}, Test #2 False"
     blockSize = bitStringLength // 10
     numberOfBlocks = 10
-    pi_values = []
-    for i in range(numberOfBlocks):
-        block = bitString[i * blockSize:(i + 1) * blockSize]
-        pi_i = block.count('1') / blockSize
-        pi_values.append(pi_i)
+    blocks = np.array([bitString[i * blockSize:(i + 1) * blockSize] for i in range(numberOfBlocks)])
+    pi_values = np.array([np.sum([1 for bit in block if bit == '1']) / blockSize for block in blocks])
     chiSquare = 4 * blockSize * sum((pi_i - 0.5) ** 2 for pi_i in pi_values)
     pValue = sp.gammaincc(numberOfBlocks / 2, chiSquare / 2)
     testConclusion = (pValue >= 0.01)
@@ -194,12 +173,10 @@ def runTest_3(bitString: str, bitStringLength: int):
     numberOf1 = bitString.count('1')
     proportionOf1 = numberOf1 / bitStringLength
     tau = 2 / bitStringLength ** 0.5
-    observedNumber = 1
-    for i in range(1, bitStringLength):
-        if bitString[i] != bitString[i - 1]:
-            observedNumber += 1
-    pValue = sp.erfc(abs(observedNumber - 2 * bitStringLength * proportionOf1 * (1 - proportionOf1)) / (
-            2 * (2 * bitStringLength) ** 0.5 * proportionOf1 * (1 - proportionOf1)))
+    observedNumber = sum(1 for a, b in zip(bitString, bitString[1:]) if a != b) + 1
+    expectedNumber = 2 * bitStringLength * proportionOf1 * (1 - proportionOf1)
+    variance = 2 * (2 * bitStringLength) ** 0.5 * proportionOf1 * (1 - proportionOf1)
+    pValue = sp.erfc(abs(observedNumber - expectedNumber) / variance)
     testConclusion = (pValue >= 0.01)
     if tau <= (proportionOf1 - 0.5):
         return f"Test_3 is not applicable. tau <= |pi - 0.5|. "
@@ -249,13 +226,9 @@ def runWithinABlockTest_4(bitString: str, bitStringLength: int):
                 current_run = 0
         return max_run
 
-    max_runs = []
-    for i in range(N):
-        block = bitString[i * blockSize:(i + 1) * blockSize]
-        max_run = longest_run_of_ones(block)
-        max_runs.append(max_run)
+    max_runs = np.array([longest_run_of_ones(bitString[i * blockSize: (i + 1) * blockSize]) for i in range(N)])
 
-    v = [0] * v_count
+    v = np.zeros(v_count, dtype=int)
     for run in max_runs:
         if run <= 1:
             v[0] += 1
@@ -280,9 +253,9 @@ def runWithinABlockTest_4(bitString: str, bitStringLength: int):
     elif blockSize == 100000:
         proportionOf1 = [0.00882, 0.2092, 0.2483, 0.1933, 0.1208, 0.0675, 0.0727]
 
-    chiSquare = sum(
-        [(v[i] - N * proportionOf1[i]) ** 2 / (N * proportionOf1[i]) if N * proportionOf1[i] > 0 else 0 for
-         i in range(len(proportionOf1))]
+    chiSquare = np.sum(
+        [(v[i] - N * proportionOf1[i]) ** 2 / (N * proportionOf1[i]) if N * proportionOf1[i] > 0 else 0
+         for i in range(len(proportionOf1))]
     )
     pValue = sp.gammaincc(K / 2, chiSquare / 2)
     testConclusion = (pValue >= 0.01)
@@ -302,35 +275,49 @@ def binaryMatrixRankTest_5(bitString: str, bitStringLength: int):
     Q = 32
     numberOfBlocks = bitStringLength // (M * Q)
 
-    def rank(binary_matrix):
-        _, u = lu(binary_matrix, permute_l=True)
-        rank = np.sum(np.abs(np.diag(u)) > 1e-10)
-        return rank
-
     prob_full_rank = 0.2888
     prob_one_less_rank = 0.5776
     prob_two_less_rank = 0.1336
-    full_rank_count = 0
-    one_less_rank_count = 0
-    two_less_rank_count = 0
-    for i in range(numberOfBlocks):
+    expected_full_rank = numberOfBlocks * prob_full_rank
+    expected_one_less_rank = numberOfBlocks * prob_one_less_rank
+    expected_two_less_rank = numberOfBlocks * prob_two_less_rank
+
+    # Функция для вычисления ранга через SVD (быстрее, чем LU-разложение для больших матриц)
+    def compute_rank(matrix):
+        u, s, vh = np.linalg.svd(matrix)
+        rank = np.sum(s > 1e-10)
+        return rank
+
+    # Функция для обработки одного блока данных
+    def process_block(i):
         start = i * M * Q
         end = start + M * Q
         bit_block = bitString[start:end]
         matrix = np.array([int(bit) for bit in bit_block]).reshape(M, Q)
-        matrix_rank = rank(matrix)
-        if matrix_rank == min(M, Q):
-            full_rank_count += 1
-        elif matrix_rank == min(M, Q) - 1:
-            one_less_rank_count += 1
-        else:
-            two_less_rank_count += 1
-    expected_full_rank = numberOfBlocks * prob_full_rank
-    expected_one_less_rank = numberOfBlocks * prob_one_less_rank
-    expected_two_less_rank = numberOfBlocks * prob_two_less_rank
+        matrix_rank = compute_rank(matrix)
+        return matrix_rank
+
+    # Параллельная обработка блоков
+    full_rank_count = 0
+    one_less_rank_count = 0
+    two_less_rank_count = 0
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_block, i) for i in range(numberOfBlocks)]
+        for future in concurrent.futures.as_completed(futures):
+            matrix_rank = future.result()
+            if matrix_rank == min(M, Q):
+                full_rank_count += 1
+            elif matrix_rank == min(M, Q) - 1:
+                one_less_rank_count += 1
+            else:
+                two_less_rank_count += 1
+
+    # Расчет статистики и p-значения
     chiSquare_stat = ((full_rank_count - expected_full_rank) ** 2) / expected_full_rank
     chiSquare_stat += ((one_less_rank_count - expected_one_less_rank) ** 2) / expected_one_less_rank
     chiSquare_stat += ((two_less_rank_count - expected_two_less_rank) ** 2) / expected_two_less_rank
+
+    # Вычисление p-значения
     pValue = np.exp(-chiSquare_stat / 2)
     testConclusion = (pValue >= 0.01)
     if testConclusion:
@@ -345,19 +332,38 @@ def discreteFourierTransformTest_6(bitString: str, bitStringLength: int):
             raise ValueError("Длина битовой строки должна быть не менее 100 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #6 False"
+
+        # Преобразование битов в числа (-1 и 1) с помощью numpy
     numbers = np.array([1 if bit == '1' else -1 for bit in bitString])
-    s = fft(numbers)
-    modulus = np.abs(s[0:bitStringLength // 2])
-    threshold = np.sqrt(bitStringLength * np.log(1 / 0.05))
-    count_below_threshold = np.sum(modulus < threshold)
-    expected_count = 0.95 * (bitStringLength / 2)
-    dStat = (count_below_threshold - expected_count) / np.sqrt(bitStringLength * 0.95 * 0.05 / 4)
-    pValue = erfc(np.abs(dStat) / np.sqrt(2))
-    testConclusion = (pValue >= 0.01)
+
+    # Разделяем задачу на блоки, если строка большая
+    num_blocks = 4  # количество блоков для параллельной обработки
+    block_size = bitStringLength // num_blocks
+    blocks = [numbers[i * block_size: (i + 1) * block_size] for i in range(num_blocks)]
+
+    def process_block(block):
+        # Преобразование Фурье для блока
+        s = fft(block)
+        modulus = np.abs(s[:len(block) // 2])
+        threshold = np.sqrt(len(block) * np.log(1 / 0.05))
+        count_below_threshold = np.sum(modulus < threshold)
+        expected_count = 0.95 * (len(block) // 2)
+        dStat = (count_below_threshold - expected_count) / np.sqrt(len(block) * 0.95 * 0.05 / 4)
+        pValue = erfc(np.abs(dStat) / np.sqrt(2))
+        return pValue
+
+    # Используем ThreadPoolExecutor для параллельной обработки блоков
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        p_values = list(executor.map(process_block, blocks))
+
+    # Рассчитываем итоговый результат (среднее p-значение)
+    average_p_value = np.mean(p_values)
+    testConclusion = (average_p_value >= 0.01)
+
     if testConclusion:
-        return f"Numbers are random. Test #6 status : {testConclusion}, pValue: {round(pValue, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #6 status : {testConclusion}, pValue: {round(pValue, 5)}"
+        return f"Numbers are random. Test #6 status : {testConclusion}, pValue: {round(average_p_value, 5)}"
+    else:
+        return f"Numbers are not random. Test #6 status : {testConclusion}, pValue: {round(average_p_value, 5)}"
 
 
 def nonOverlappingTemplateMachineTest_7(bitString: str, bitStringLength: int):
@@ -370,29 +376,41 @@ def nonOverlappingTemplateMachineTest_7(bitString: str, bitStringLength: int):
     numberOfBlocks = 10
     blockSize = bitStringLength // numberOfBlocks
     templateLength = len(template)
-    occurrences = []
-    for i in range(numberOfBlocks):
-        block = bitString[i * blockSize:(i + 1) * blockSize]
+
+    # Функция для подсчета вхождений шаблона в блок
+    def count_occurrences(block):
         count = 0
         j = 0
         while j <= blockSize - templateLength:
             if block[j:j + templateLength] == template:
                 count += 1
-                j += templateLength
+                j += templateLength  # перемещаемся на длину шаблона
             else:
-                j += 1
-    occurrences.append(count)
+                j += 1  # иначе просто сдвигаем на 1
+        return count
+
+    # Разбиваем строку на блоки
+    blocks = [bitString[i * blockSize:(i + 1) * blockSize] for i in range(numberOfBlocks)]
+
+    # Используем ThreadPoolExecutor для параллельной обработки блоков
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        occurrences = list(executor.map(count_occurrences, blocks))
+
+    # Математические вычисления для статистики
     M = blockSize
     m = templateLength
     mu = (M - m + 1) / (2 ** m)
     sigma_squared = M * ((1 / 2 ** m) - (2 * m - 1) / 2 ** (2 * m))
+
     chiSquare = sum(((W_i - mu) ** 2) / sigma_squared for W_i in occurrences)
     pValue = sp.gammaincc(numberOfBlocks / 2, chiSquare / 2)
+
     testConclusion = (pValue >= 0.01)
+
     if testConclusion:
         return f"Numbers are random. Test #7 status : {testConclusion}, pValue: {round(pValue, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #7 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    else:
+        return f"Numbers are not random. Test #7 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
 def overlappingTemplateMachineTest_8(bitString: str, bitStringLength: int):
@@ -408,8 +426,9 @@ def overlappingTemplateMachineTest_8(bitString: str, bitStringLength: int):
     K = 5  # количество степеней свободы
     lambda_val = (blockSize - templateLength + 1) / 2 ** templateLength
     pi = [np.exp(-lambda_val) * lambda_val ** i / factorial(i) for i in range(K)]
-    pi.append(1 - sum(pi))
+    pi.append(1 - sum(pi))  # добавляем оставшуюся вероятность
 
+    # Функция подсчета вхождений шаблона в блок
     def count_overlapping_template(block, template):
         count = 0
         for i in range(len(block) - len(template) + 1):
@@ -417,17 +436,39 @@ def overlappingTemplateMachineTest_8(bitString: str, bitStringLength: int):
                 count += 1
         return count
 
+    # Разбиение на блоки и параллельная обработка
     blocks = [bitString[i * blockSize:(i + 1) * blockSize] for i in range(numberOfBlocks)]
-    observed_counts = [count_overlapping_template(block, template) for block in blocks]
+
+    # Параллельная обработка подсчета вхождений шаблона в блоках
+    with ThreadPoolExecutor() as executor:
+        observed_counts = list(executor.map(lambda block: count_overlapping_template(block, template), blocks))
+
+    # Подсчет частоты вхождений
     F = np.bincount(observed_counts, minlength=K + 1)
+
+    # Ожидаемые значения
     expected_counts = [numberOfBlocks * p for p in pi]
-    chiSquare = sum((F[i] - expected_counts[i]) ** 2 / expected_counts[i] for i in range(K + 1))
+
+    # Вычисление статистики хи-квадрат с проверкой на ноль
+    chiSquare = 0
+    for i in range(K + 1):
+        if expected_counts[i] > 0:  # Проверяем, что ожидаемое количество больше нуля
+            chiSquare += (F[i] - expected_counts[i]) ** 2 / expected_counts[i]
+        else:
+            # Если ожидаемое количество равно нулю, добавляем небольшой штраф для избегания деления на ноль
+            chiSquare += (F[i] - expected_counts[i]) ** 2 / (
+                        expected_counts[i] + 1e-10)  # можно заменить на небольшое значение
+
+    # Вычисление p-value с помощью функции gammaincc
     pValue = sp.gammaincc(K / 2, chiSquare / 2)
+
+    # Определение заключения теста
     testConclusion = (pValue >= 0.01)
+
     if testConclusion:
         return f"Numbers are random. Test #8 status : {testConclusion}, pValue: {round(pValue, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #8 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    else:
+        return f"Numbers are not random. Test #8 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
 def universalStatisticalTest_9(bitString: str, bitStringLength: int):
@@ -676,6 +717,9 @@ def randomExcursionVariantTest_15(bitString: str, bitStringLength: int):
         return f"Numbers are not  random. Test #15 status : {testConclusion}, pValues: {scores}"
 
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 class NISTTestGUI:
     def __init__(self, root):
         self.root = root
@@ -683,155 +727,100 @@ class NISTTestGUI:
         self.source_choice = tk.StringVar(value="None")
         self.bitString = None
         self.bitStringLength = None
-        self.create_source_selection()
-        self.input_frame = tk.Frame(root)
-        self.input_label = tk.Label(self.input_frame, text="")
-        self.input_entry = tk.Entry(self.input_frame, state='disabled')
-        self.input_entry.bind("<Return>", self.on_enter)  # Реакция на нажатие Enter
-        self.browse_button = tk.Button(self.input_frame, text="...", command=self.load_file)
-        self.input_frame.pack(pady=10)
         self.running_threads = 0
         self.q = queue.Queue()
 
-        # Устанавливаем result_text в заблокированное состояние
-        self.result_text = tk.Text(root, height=20, width=80, state='disabled')
-        self.result_text.pack()
+        self.create_source_selection()
+
+        # Input frame
+        self.input_frame = tk.Frame(root)
+        self.input_label = tk.Label(self.input_frame, text="Введите путь к файлу:")
+        self.input_entry = tk.Entry(self.input_frame, state='disabled')
+        self.browse_button = tk.Button(self.input_frame, text="...", command=self.load_file)
+        self.input_frame.pack(pady=10)
+
+        # Result display
+        self.result_text = tk.Text(root, height=10, width=80, state='disabled')
+        self.result_text.pack(pady=10)
+
+        # Test buttons (возвращаем кнопки тестов)
         self.create_test_buttons()
+
+        self.check_queue()  # Проверка очереди на обновления
 
     def create_source_selection(self):
         frame = tk.Frame(self.root)
         frame.pack(pady=10)
-        tk.Radiobutton(frame, text="RNG", variable=self.source_choice, value="RNG", command=self.toggle_input).pack(
-            side="left")
-        tk.Radiobutton(frame, text="PRNG", variable=self.source_choice, value="PRNG", command=self.toggle_input).pack(
-            side="left")
-        tk.Radiobutton(frame, text="Custom", variable=self.source_choice, value="Custom",
-                       command=self.toggle_input).pack(side="left")
+        tk.Radiobutton(frame, text="RNG", variable=self.source_choice, value="RNG", command=self.toggle_input).pack(side="left")
+        tk.Radiobutton(frame, text="PRNG", variable=self.source_choice, value="PRNG", command=self.toggle_input).pack(side="left")
+        tk.Radiobutton(frame, text="Custom", variable=self.source_choice, value="Custom", command=self.toggle_input).pack(side="left")
 
     def toggle_input(self):
+        choice = self.source_choice.get()
         self.input_entry.config(state='normal')
         self.browse_button.config(state='normal')
-        choice = self.source_choice.get()
-        self.input_frame.pack_forget()
-        self.input_frame.pack(pady=10)
+
         if choice in ("RNG", "PRNG"):
             self.input_label.config(text="Введите количество чисел:")
             self.input_label.pack(side="left")
             self.input_entry.pack(side="left")
             self.browse_button.pack_forget()
-            if choice == "RNG":
-                self.input_entry.bind('<Return>', self.fetchRNGData)
-            elif choice == "PRNG":
-                self.input_entry.bind('<Return>', self.fetchPRNGData)
         elif choice == "Custom":
             self.input_label.config(text="Введите битовую строку или выберите файл:")
             self.input_label.pack(side="left")
             self.input_entry.pack(side="left")
             self.browse_button.pack(side="left")
 
-    def on_enter(self, event):
-        input_data = self.input_entry.get()
-        if not input_data:
-            messagebox.showerror("Ошибка", "Ввод не может быть пустым. Пожалуйста, введите данные.")
-            return
-        if self.source_choice.get() in ("RNG", "PRNG"):
-            try:
-                self.bitStringLength = int(input_data)
-                self.bitString = None
-                self.append_text_to_result(f"Количество чисел установлено: {self.bitStringLength}\n")
-            except ValueError:
-                messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
-        elif self.source_choice.get() == "Custom":
-            self.bitString = input_data
-            self.bitStringLength = len(self.bitString)
-            self.adjust_entry_width(self.bitString)
-            self.append_text_to_result(f"Битовая строка установлена: {self.bitString}\n")
-
-    def fetchRNGData(self, event):
-        try:
-            randomNumbersQRNG = int(self.input_entry.get())
-            randomNumbers, self.bitString, self.bitStringLength = getRandomNumbers(randomNumbersQRNG)
-            self.append_text_to_result(f"Получено {randomNumbersQRNG} чисел из QRNG.\n")
-            self.append_text_to_result(f"Битовая строка: {self.bitString}.\n")
-            self.append_text_to_result(f"Длина битовой строки {self.bitStringLength}.\n")
-        except ValueError:
-            messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
-
-    def fetchPRNGData(self, event):
-        try:
-            numbersLocal = int(self.input_entry.get())
-            randomNumbers, self.bitString, self.bitStringLength = getRandomNumbersLocal(numbersLocal)
-            self.append_text_to_result(f"Получено {numbersLocal} чисел из PRNG.\n")
-            self.append_text_to_result(f"Битовая строка: {self.bitString}.\n")
-            self.append_text_to_result(f"Длина битовой строки {self.bitStringLength}.\n")
-        except ValueError:
-            messagebox.showerror("Ошибка", "Пожалуйста, введите корректное количество чисел.")
-
     def load_file(self):
-        # Открытие окна для выбора файла
         filename = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
         if filename:
-            # Запуск обработки файла в отдельном потоке, чтобы избежать зависания интерфейса
+            # Запуск обработки файла в другом потоке, чтобы не блокировать GUI
             threading.Thread(target=self.process_file, args=(filename,), daemon=True).start()
 
     def process_file(self, filename):
-        self.running_threads += 1  # Увеличиваем количество активных потоков
+        logging.info(f"Начинаю обработку файла: {filename}")
         try:
-            # Чтение файла построчно
             with open(filename, 'r') as file:
                 lines = file.readlines()
 
-            # Обрабатываем данные с прогрессом
             dataNumbers = []
-            for line in tqdm.tqdm(lines, desc="Чтение и обработка файла", unit="строка"):
+            for line in lines:
                 line = line.strip()
                 if line:
                     dataNumbers.append(line)
 
-            # После того как файл прочитан, передаем данные для дальнейшей обработки
+            # Обработка данных
             self.handle_data(dataNumbers)
 
         except Exception as e:
+            logging.error(f"Ошибка при обработке файла: {e}")
             messagebox.showerror("Ошибка", f"Не удалось обработать файл: {e}")
-        finally:
-            self.running_threads -= 1  # Поток завершен
 
     def handle_data(self, dataNumbers):
-        self.running_threads += 1  # Увеличиваем количество активных потоков
+        logging.info("Начинаю обработку данных в handle_data")
+
         try:
-            # Обрабатываем данные
-            self.random_numbers, self.bitString, self.bitStringLength = getRandomNumbersUser("\n".join(dataNumbers))
+            # Убираем лишние пробелы из каждой строки данных
+            dataNumbers = [line.strip() for line in dataNumbers]
 
-            # Добавляем данные в очередь для безопасного обновления интерфейса
-            self.q.put(("update_input", "\n".join(dataNumbers)))
-            self.q.put(("update_result", self.random_numbers, self.bitString, self.bitStringLength))
+            # Передаем данные как строку, а не список
+            self.dataNumbers, self.bitString, self.bitStringLength = getRandomNumbersUser("\n".join(dataNumbers))
 
-        except ValueError:
-            messagebox.showerror("Ошибка", "Поле ввода пустое или данные не корректны.")
+            logging.info(f"Обработанные данные: {self.dataNumbers[:10]}... (первые 10 чисел)")
+
+            # Добавляем результаты в интерфейс
+            self.append_text_to_result(f"Количество чисел: {len(self.dataNumbers)}\n")
+            self.append_text_to_result(f"Длина битовой строки: {self.bitStringLength}\n")
+
         except Exception as e:
+            logging.error(f"Ошибка при обработке данных: {e}")
             messagebox.showerror("Ошибка", f"Произошла ошибка при обработке данных: {e}")
-        finally:
-            self.running_threads -= 1  # Поток завершен
-
-    def adjust_entry_width(self, content):
-        length = len(content)
-        self.input_entry.config(width=80 if length > 50 else 30)
-
-        # Функция для добавления текста в окно result_text
 
     def append_text_to_result(self, text):
-        self.result_text.config(state='normal')  # Разблокируем окно для записи
+        self.result_text.config(state='normal')
         self.result_text.insert(tk.END, text)
-        self.result_text.yview(tk.END)  # Вставляем текст в конец
-        self.result_text.config(state='disabled')  # Блокируем снова, чтобы нельзя было редактировать
-
-    def execute_test(self, test_function):
-        if self.bitString is not None and self.bitStringLength is not None:
-            result = test_function(self.bitString, self.bitStringLength)
-            self.append_text_to_result(f"Result: {result}\n")
-            self.result_text.yview(tk.END)  # Автоматическая прокрутка вниз
-        else:
-            messagebox.showerror("Ошибка", "Недопустимые данные для выполнения теста.")
+        self.result_text.yview(tk.END)
+        self.result_text.config(state='disabled')
 
     def create_test_buttons(self):
         button_frame = tk.Frame(self.root)
@@ -853,7 +842,6 @@ class NISTTestGUI:
             ("Random Excursion Test (14)", randomExcursionTest_14),
             ("Random Excursion Variant Test (15)", randomExcursionVariantTest_15)
         ]
-
         button_font = font.Font(family="Helvetica", size=13, weight="bold")
         max_text_width = max([button_font.measure(name) for name, _ in test_functions]) // 10
         for i, (test_name, test_function) in enumerate(test_functions):
@@ -879,6 +867,14 @@ class NISTTestGUI:
         else:
             messagebox.showerror("Ошибка", "Пожалуйста, введите или выберите данные для анализа.")
 
+    def execute_test(self, test_function):
+        if self.bitString is not None and self.bitStringLength is not None:
+            result = test_function(self.bitString, self.bitStringLength)
+            self.append_text_to_result(f"Result: {result}\n")
+            self.result_text.yview(tk.END)
+        else:
+            messagebox.showerror("Ошибка", "Недопустимые данные для выполнения теста.")
+
     def reset(self):
         self.source_choice.set("None")
         self.input_entry.delete(0, tk.END)
@@ -888,6 +884,23 @@ class NISTTestGUI:
         self.result_text.config(state='normal')
         self.result_text.delete(1.0, tk.END)
         self.result_text.config(state='disabled')
+
+    def check_queue(self):
+        """Проверка очереди каждую секунду и обновление интерфейса, если нужно"""
+        try:
+            while not self.q.empty():
+                task, *args = self.q.get_nowait()  # Извлекаем данные из очереди
+                if task == "update_input":
+                    self.input_entry.delete(0, tk.END)  # Очищаем старые данные
+                    self.input_entry.insert(tk.END, args[0])  # Вставляем новые данные
+                elif task == "update_result":
+                    processed_data, bitString, bitStringLength = args
+                    self.append_text_to_result(f"Количество чисел: {len(processed_data)}\n")
+                    self.append_text_to_result(f"Битовая строка: {bitString}\n")
+                    self.append_text_to_result(f"Длина битовой строки: {bitStringLength}\n")
+        finally:
+            # Проверка очереди снова через 1000 миллисекунд (1 секунду)
+            self.root.after(1000, self.check_queue)
 
 
 if __name__ == "__main__":
