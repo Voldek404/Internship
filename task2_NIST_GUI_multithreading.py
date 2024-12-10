@@ -510,6 +510,7 @@ def linearComplexityTest_10(bitString, bitStringLength):
             raise ValueError("Длина битовой строки должна быть не менее 387840 бит.")
     except ValueError as e:
         return f"Ошибка: {e}, Test #10 False"
+    logging.debug("Начало выполнения теста на линейную сложность.")
     N = bitStringLength // M
     expected_complexity = M / 2 + (9 + (-1) ** M) / 36
 
@@ -529,18 +530,28 @@ def linearComplexityTest_10(bitString, bitStringLength):
                     L = i + 1 - L
                     m = i
                     b = t
+        logging.debug("Алгоритм Берлекемпа-Масси завершен для блока.")
         return L
 
-    blocks = [bitString[i * M:(i + 1) * M] for i in range(N)]
-    complexities = [berlekampMasseyAlgorithm([int(bit) for bit in block]) for block in blocks]
+    logging.debug("Разделение битовой строки на блоки.")
+    blocks = np.array_split(np.array([int(bit) for bit in bitString]), N)
+
+    # Параллельная обработка блоков
+    logging.debug(f"Количество блоков: {len(blocks)}. Начинаем параллельную обработку.")
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        complexities = list(executor.map(lambda block: berlekampMasseyAlgorithm([int(bit) for bit in block]), blocks))
+    logging.debug("Обработка всех блоков завершена.")
+
     T = [(complexity - expected_complexity) for complexity in complexities]
-    chiSquare = sum([(t ** 2) / (M / 2) for t in T])
-    pValue = sp.gammaincc(N / 2, chiSquare / 2)
+    logging.debug("Подсчет хи-квадрат.")
+    chiSquare, pValue = chi2(complexities, expected_complexity)
+    logging.debug(f"Статистика хи-квадрат: {chiSquare}, p-значение: {pValue}")
     testConclusion = (pValue >= 0.01)
+
     if testConclusion:
         return f"Numbers are random. Test #10 status : {testConclusion}, pValue: {round(pValue, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #10 status : {testConclusion}, pValue: {round(pValue, 5)}"
+    else:
+        return f"Numbers are not random. Test #10 status : {testConclusion}, pValue: {round(pValue, 5)}"
 
 
 def serialTest_11(bitString: str, bitStringLength: int):
@@ -560,24 +571,32 @@ def serialTest_11(bitString: str, bitStringLength: int):
             patternCount[substring] += 1
         return patternCount
 
-    V_m = countPatterns(bitString, m)
-    V_m_1 = countPatterns(bitString, m - 1)
-    V_m_2 = countPatterns(bitString, m - 2)
+    # Параллельная обработка подсчета паттернов для V_m, V_m_1, V_m_2
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = list(executor.map(lambda m_val: countPatterns(bitString, m_val), [m, m - 1, m - 2]))
+
+    V_m, V_m_1, V_m_2 = results
+
     N = bitStringLength
     psi_m = (sum(v ** 2 for v in V_m.values()) - N) / N
     psi_m_1 = (sum(v ** 2 for v in V_m_1.values()) - N) / N
     psi_m_2 = (sum(v ** 2 for v in V_m_2.values()) - N) / N
+
     delta_psi_m = psi_m - psi_m_1
     delta_psi_m_1 = psi_m_1 - psi_m_2
+
     df_m = 2 ** (m - 2)
     df_m_1 = 2 ** (m - 3)
+
     pValue_1 = sp.gammainc(df_m / 2, (delta_psi_m ** 2) / 2)
     pValue_2 = sp.gammainc(df_m_1 / 2, (delta_psi_m_1 ** 2) / 2)
+
     testConclusion = (pValue_1 >= 0.01 and pValue_2 >= 0.01)
+
     if testConclusion:
         return f"Numbers are random. Test #11 status : {testConclusion}, pValue_1: {round(pValue_1, 5)}, pValue_2:{round(pValue_2, 5)}"
-    if not testConclusion:
-        return f"Numbers are not  random. Test #11 status : {testConclusion}, pValue_1: {round(pValue_1, 5)}, pValue_2:{round(pValue_2, 5)}"
+    else:
+        return f"Numbers are not random. Test #11 status : {testConclusion}, pValue_1: {round(pValue_1, 5)}, pValue_2:{round(pValue_2, 5)}"
 
 
 def approximateEntropyTest_12(bitString, bitStringLength):
